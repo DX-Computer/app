@@ -20,7 +20,6 @@ import {
   toContractProof,
   PUBLISH_SCOPE,
 } from "@/app/lib/zk/identityTree";
-import { hash2 } from "@/app/lib/zk/poseidon";
 import { toHex32 } from "@/app/lib/zk/poseidon";
 import { ChipEnrollData, ChipPublishData } from "../types/common.types";
 import { ModalContext } from "@/app/providers";
@@ -28,7 +27,6 @@ import useIdentity from "./useIdentity";
 
 type Hash = `0x${string}`;
 
-const ENROLL_SCOPE = BigInt("0x656e726f6c6c");
 
 const useChip = () => {
   const ctx = useContext(ModalContext);
@@ -85,30 +83,29 @@ const useChip = () => {
     setBusy(true);
     try {
       const id = ensureIdentity();
-      let proof: Hash = "0x";
-      let enrollNullifier: Hash = toHex32(hash2(id.commitment, ENROLL_SCOPE));
-      if (await circuitAvailable("enrollment")) {
-        const freshHex = freshnessFor(id.commitment);
-        ctx?.setTxStatus({
-          phase: "pending",
-          message: "awaitingChip",
-        });
-        const chipAttest = await fetchAttestation(freshHex);
-        ctx?.setTxStatus({
-          phase: "pending",
-          message: "provingAttestation",
-        });
-        const inputs = enrollProofInputs(chipAttest, freshHex);
-        const res = await prove("enrollment", inputs);
-        proof = res.proof;
-        enrollNullifier = toHex32(
-          enrollNullifierFrom(String(chipAttest.chipId)),
+      if (!(await circuitAvailable("enrollment"))) {
+        throw new Error(
+          "enrollment circuit missing at /circuits/enrollment.json",
         );
       }
+      const freshHex = freshnessFor(id.commitment);
+      ctx?.setTxStatus({
+        phase: "pending",
+        message: "awaitingChip",
+      });
+      const chipAttest = await fetchAttestation(freshHex);
+      ctx?.setTxStatus({
+        phase: "pending",
+        message: "provingAttestation",
+      });
+      const inputs = enrollProofInputs(chipAttest, freshHex);
+      const res = await prove("enrollment", inputs);
       return {
         commitment: toHex32(id.commitment),
-        proof,
-        enrollNullifier,
+        proof: res.proof,
+        enrollNullifier: toHex32(
+          enrollNullifierFrom(String(chipAttest.chipId)),
+        ),
       };
     } catch (e) {
       console.log("chip.enrollData failed", e);
