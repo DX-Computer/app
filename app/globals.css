@@ -1,0 +1,94 @@
+@import "tailwindcss";
+
+html,
+body,
+* {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+html::-webkit-scrollbar,
+body::-webkit-scrollbar,
+*::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+@font-face {
+  font-display: swap;
+  font-family: "HandJet";
+  font-weight: 400;
+  src: url("/fonts/handjet.ttf");
+}
+
+@theme {
+  --font-hand: "HandJet";
+
+  --cursor-blacksmithS: url("/images/cursor.png"), auto;
+  --cursor-blacksmithHS: url("/images/pointer.png"), pointer;
+}
+
+@layer utilities {
+  .cursor-blacksmithS {
+    cursor: var(--cursor-blacksmithS);
+  }
+  .cursor-blacksmithHS {
+    cursor: var(--cursor-blacksmithHS);
+  }
+}
+
+html,
+body {
+  padding: 0;
+  margin: 0;
+  background-color: #050810;
+  background-image: url("/images/fondo.png");
+  background-repeat: repeat;
+  background-size: 128px;
+  color: white;
+  font-family: var(--font-hand);
+}
+
+body::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+#noScroll::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+#noScroll::-webkit-scrollbar-track:active {
+  background-color: transparent !important;
+}
+
+#noScroll::-webkit-scrollbar-thumb:active {
+  background-color: transparent !important;
+}
+
+body::-webkit-scrollbar-track:active {
+  background-color: transparent !important;
+}
+
+body::-webkit-scrollbar-thumb:active {
+  background-color: transparent !important;
+}
+
+html::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+html::-webkit-scrollbar-track:active {
+  background-color: transparent !important;
+}
+
+html::-webkit-scrollbar-thumb:active {
+  background-color: transparent !important;
+}
+
+button {
+  cursor: var(--cursor-blacksmithHS);
+}

@@ -1,0 +1,71 @@
+export const SPONSOR_VAULT_ABI = [
+  {
+    type: "function",
+    name: "totalPoints",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "accRewardPerPoint",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "points",
+    stateMutability: "view",
+    inputs: [{ name: "sponsor", type: "address" }],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "pending",
+    stateMutability: "view",
+    inputs: [{ name: "sponsor", type: "address" }],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "deposit",
+    stateMutability: "payable",
+    inputs: [],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "notifyReward",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "amount", type: "uint256" }],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "claim",
+    stateMutability: "nonpayable",
+    inputs: [],
+    outputs: [],
+  },
+  {
+    type: "event",
+    name: "Deposited",
+    inputs: [
+      { name: "sponsor", type: "address", indexed: true },
+      { name: "amount", type: "uint256", indexed: false },
+      { name: "totalPoints", type: "uint256", indexed: false },
+    ],
+  },
+  {
+    type: "event",
+    name: "Claimed",
+    inputs: [
+      { name: "sponsor", type: "address", indexed: true },
+      { name: "amount", type: "uint256", indexed: false },
+    ],
+  },
+  { type: "error", name: "ZeroAmount", inputs: [] },
+  { type: "error", name: "NoSponsors", inputs: [] },
+  { type: "error", name: "TransferFailed", inputs: [] },
+] as const;

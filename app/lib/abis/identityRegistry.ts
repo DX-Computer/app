@@ -1,0 +1,72 @@
+export const IDENTITY_REGISTRY_ABI = [
+  {
+    type: "function",
+    name: "currentRoot",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "bytes32" }],
+  },
+  {
+    type: "function",
+    name: "isKnownRoot",
+    stateMutability: "view",
+    inputs: [{ name: "root", type: "bytes32" }],
+    outputs: [{ type: "bool" }],
+  },
+  {
+    type: "function",
+    name: "hasEnrolled",
+    stateMutability: "view",
+    inputs: [{ name: "identityCommitment", type: "uint256" }],
+    outputs: [{ type: "bool" }],
+  },
+  {
+    type: "function",
+    name: "enrollmentCount",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "groupId",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "semaphore",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "address" }],
+  },
+  {
+    type: "function",
+    name: "usedEnrollNullifier",
+    stateMutability: "view",
+    inputs: [{ name: "nullifier", type: "bytes32" }],
+    outputs: [{ type: "bool" }],
+  },
+  {
+    type: "function",
+    name: "enroll",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "proof", type: "bytes" },
+      { name: "identityCommitment", type: "uint256" },
+      { name: "enrollNullifier", type: "bytes32" },
+    ],
+    outputs: [],
+  },
+  {
+    type: "event",
+    name: "Enrolled",
+    inputs: [
+      { name: "identityCommitment", type: "uint256", indexed: true },
+      { name: "enrollNullifier", type: "bytes32", indexed: false },
+    ],
+  },
+  { type: "error", name: "AlreadyEnrolled", inputs: [] },
+  { type: "error", name: "BadProof", inputs: [] },
+] as const;
