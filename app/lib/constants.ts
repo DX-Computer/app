@@ -6,7 +6,7 @@ export const LOCALES =  ["en", "es", "ar", "pt", "fr"];
 export const ACTIVE_CHAIN =
   process.env.NEXT_PUBLIC_CHAIN === "zksync" ? zksyncInMemoryNode : foundry;
 
-export const IPFS_GATEWAY = "https://thedial.ipfs.infura.io";
+export const IPFS_GATEWAY = "https://cdn.digitalax.xyz";
 
 export const MONA_ADDRESS = ADDRESSES.mona;
 
