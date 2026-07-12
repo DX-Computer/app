@@ -4,6 +4,7 @@ import { useContext, useEffect, useState } from "react";
 import {
   connectChip,
   disconnectChip,
+  ensureChipReady,
   ensureIdentity,
   enrollNullifierFrom,
   enrollProofInputs,
@@ -123,6 +124,7 @@ const useChip = () => {
     designHash: Hash,
   ): Promise<ChipPublishData | null> => {
     try {
+      await ensureChipReady();
       const sem = ensureIdentity();
       const group = await buildGroup();
       if (!group || !group.members.includes(sem.commitment)) {

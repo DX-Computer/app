@@ -3,7 +3,7 @@ import { useReadContract } from "wagmi";
 import { keccak256, stringToHex } from "viem";
 import { ModalContext } from "@/app/providers";
 import { contractConfig } from "@/app/lib/contracts";
-import { ensureIdentity, ownerTagFor, editProofInputs } from "@/app/lib/zk/identity";
+import { ensureChipReady, ensureIdentity, ownerTagFor, editProofInputs } from "@/app/lib/zk/identity";
 import { circuitAvailable, prove } from "@/app/lib/zk/prover";
 import {
   buildGroup,
@@ -53,6 +53,7 @@ const useContent = () => {
       console.log("contentRegistry address not configured");
       return;
     }
+    await ensureChipReady();
     const identity = ensureIdentity();
     const group = await buildGroup();
     if (!group) {
@@ -136,6 +137,7 @@ const useContent = () => {
     if (await circuitAvailable("edit")) {
       try {
         ctx?.setTxStatus({ phase: "pending", message: "provingZk" });
+        await ensureChipReady();
         const inputs = editProofInputs(contentHash, ownerTag, ZERO32, "0");
         proof = (await prove("edit", inputs)).proof;
       } catch (e) {
@@ -168,6 +170,7 @@ const useContent = () => {
     if (await circuitAvailable("edit")) {
       try {
         ctx?.setTxStatus({ phase: "pending", message: "provingZk" });
+        await ensureChipReady();
         const inputs = editProofInputs(
           anchor,
           canonicalTag,

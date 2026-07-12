@@ -2,14 +2,34 @@
 
 import { FunctionComponent, JSX } from "react";
 import Link from "next/link";
+import { useReadContract } from "wagmi";
 import Caja from "./Caja";
 import { useShell } from "./Shell";
+import { contractConfig } from "@/app/lib/contracts";
 
 const tag = "relative flex text-[10px] text-gray-400";
 const body = "relative flex text-xs leading-relaxed";
 
 const GovernLeft: FunctionComponent = (): JSX.Element => {
   const s = useShell();
+  const council = contractConfig("dxCouncil");
+  const { data: quorumRaw } = useReadContract({
+    address: council.address,
+    abi: council.abi,
+    functionName: "quorum",
+    query: { enabled: council.ready },
+  });
+  const { data: windowRaw } = useReadContract({
+    address: council.address,
+    abi: council.abi,
+    functionName: "votingWindow",
+    query: { enabled: council.ready },
+  });
+  const quorum = typeof quorumRaw === "bigint" ? quorumRaw.toString() : "—";
+  const windowMin =
+    typeof windowRaw === "bigint"
+      ? `${Math.round(Number(windowRaw) / 60)} min`
+      : "—";
 
   return (
     <>
@@ -41,6 +61,14 @@ const GovernLeft: FunctionComponent = (): JSX.Element => {
           <span className={tag}>{s.dict.govern.theCycle}</span>
           <span className={body}>
             {s.dict.govern.theCycleBody}
+          </span>
+        </div>
+        <div className="relative flex flex-col gap-1">
+          <span className="relative flex text-xs">
+            {s.dict.govern.currentQuorum}: {quorum}
+          </span>
+          <span className="relative flex text-xs">
+            {s.dict.govern.votingTime}: {windowMin}
           </span>
         </div>
       </Caja>

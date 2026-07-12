@@ -6,7 +6,7 @@ import { ModalContext } from "@/app/providers";
 import { KitDraft } from "../types/common.types";
 import { useTrackedWrite } from "./useTrackedWrite";
 import useChip from "./useChip";
-import { SNARK_FIELD, editProofInputs } from "@/app/lib/zk/identity";
+import { SNARK_FIELD, editProofInputs, ensureChipReady } from "@/app/lib/zk/identity";
 import { circuitAvailable, prove } from "@/app/lib/zk/prover";
 
 type Hash = `0x${string}`;
@@ -49,6 +49,7 @@ const editProof = async (
   if (!anchor || !ownerTag) return "0x";
   if (!(await circuitAvailable("edit"))) return "0x";
   try {
+    await ensureChipReady();
     const inputs = editProofInputs(anchor, ownerTag, newContentHash, nonce);
     onProving?.();
     const { proof } = await prove("edit", inputs);

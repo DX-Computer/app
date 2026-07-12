@@ -18,6 +18,8 @@ const label = "relative flex text-[10px] text-gray-400";
 const short = (a?: string): string =>
   a ? `${a.slice(0, 6)}…${a.slice(-4)}` : "—";
 
+const BUCKETS = ["0.01", "0.1", "0.25", "0.5", "0.75", "1", "5", "7", "10"];
+
 const describe = (p: ProposalSummary, d: GovernDict): string => {
   if (p.kind === 0)
     return fmt(p.banned ? d.describeBan : d.describeUnban, {
@@ -26,6 +28,10 @@ const describe = (p: ProposalSummary, d: GovernDict): string => {
   if (p.kind === 1) return fmt(d.describeQuorum, { value: p.value });
   if (p.kind === 2)
     return fmt(d.describeWindow, { minutes: Math.round(Number(p.value) / 60) });
+  if (p.kind === 3)
+    return fmt(d.describeBucket, {
+      amount: BUCKETS[Number(p.value)] ?? p.value,
+    });
   return "—";
 };
 
@@ -47,7 +53,7 @@ const ProposalsCenter: FunctionComponent<ProposalsCenterProps> = ({
     if (!ts || !n) return "—";
     return new Date(n * 1000).toISOString().slice(0, 10);
   };
-  const KIND = [g.kindBan, g.kindQuorum, g.kindWindow];
+  const KIND = [g.kindBan, g.kindQuorum, g.kindWindow, g.kindBucket];
 
   return (
     <Caja className="flex-col flex-1 gap-2 p-4 md:min-h-0">

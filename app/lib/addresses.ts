@@ -14,7 +14,7 @@ export const ADDRESSES = {
   slashingCouncil: norm(process.env.NEXT_PUBLIC_SLASHING_COUNCIL),
   governance: norm(process.env.NEXT_PUBLIC_GOVERNANCE),
   identityRegistry: norm(process.env.NEXT_PUBLIC_IDENTITY_REGISTRY),
-  monaBalanceTree: norm(process.env.NEXT_PUBLIC_MONA_BALANCE_TREE),
+  balancePool: norm(process.env.NEXT_PUBLIC_BALANCE_POOL),
   ballot: norm(process.env.NEXT_PUBLIC_BALLOT),
   contentRegistry: norm(process.env.NEXT_PUBLIC_CONTENT_REGISTRY),
   kitRegistry: norm(process.env.NEXT_PUBLIC_KIT_REGISTRY),

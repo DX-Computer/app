@@ -10,9 +10,7 @@ import { ACTIVE_CHAIN } from "@/app/lib/constants";
 export const useChainClock = (): number => {
   const { data: block } = useBlock({ watch: true, chainId: ACTIVE_CHAIN.id });
   const anchor = useRef<{ chain: number; wall: number } | null>(null);
-  const [nowSec, setNowSec] = useState<number>(() =>
-    Math.floor(Date.now() / 1000),
-  );
+  const [nowSec, setNowSec] = useState<number>(0);
 
   useEffect(() => {
     if (!block) return;
@@ -29,9 +27,7 @@ export const useChainClock = (): number => {
   useEffect(() => {
     const compute = (): number => {
       const a = anchor.current;
-      return a
-        ? Math.floor(a.chain + (Date.now() / 1000 - a.wall))
-        : Math.floor(Date.now() / 1000);
+      return a ? Math.floor(a.chain + (Date.now() / 1000 - a.wall)) : 0;
     };
     setNowSec(compute());
     const iv = setInterval(() => setNowSec(compute()), 1000);

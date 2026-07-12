@@ -22,7 +22,8 @@ export const DX_COUNCIL_ABI = [
     inputs: [{ name: "id", type: "uint256" }],
     outputs: [
       { name: "identityRoot", type: "uint256" },
-      { name: "balanceRoot", type: "bytes32" },
+      { name: "poolRoot", type: "bytes32" },
+      { name: "bucket", type: "uint8" },
       { name: "start", type: "uint64" },
       { name: "end", type: "uint64" },
       { name: "exists", type: "bool" },
@@ -59,13 +60,6 @@ export const DX_COUNCIL_ABI = [
   },
   {
     type: "function",
-    name: "minBalance",
-    stateMutability: "view",
-    inputs: [],
-    outputs: [{ type: "uint128" }],
-  },
-  {
-    type: "function",
     name: "proposeBan",
     stateMutability: "nonpayable",
     inputs: [
@@ -97,6 +91,16 @@ export const DX_COUNCIL_ABI = [
   },
   {
     type: "function",
+    name: "proposeBucket",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "newBucket", type: "uint8" },
+      { name: "contentUri", type: "string" },
+    ],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function",
     name: "votingWindow",
     stateMutability: "view",
     inputs: [],
@@ -108,8 +112,8 @@ export const DX_COUNCIL_ABI = [
     stateMutability: "nonpayable",
     inputs: [
       { name: "voteProof", type: "tuple", components: SEMAPHORE_PROOF_COMPONENTS },
-      { name: "balanceLinkProof", type: "tuple", components: SEMAPHORE_PROOF_COMPONENTS },
-      { name: "balanceZkProof", type: "bytes" },
+      { name: "poolZkProof", type: "bytes" },
+      { name: "poolRoot", type: "bytes32" },
       { name: "proposalId", type: "uint256" },
     ],
     outputs: [],
@@ -163,4 +167,5 @@ export const DX_COUNCIL_ABI = [
   { type: "error", name: "StaleRoot", inputs: [] },
   { type: "error", name: "BelowFloor", inputs: [] },
   { type: "error", name: "BadWindow", inputs: [] },
+  { type: "error", name: "BadBucket", inputs: [] },
 ] as const;

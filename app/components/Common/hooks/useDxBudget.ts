@@ -1,4 +1,4 @@
-import { useReadContract } from "wagmi";
+import { useAccount, useReadContract } from "wagmi";
 import { ADDRESSES } from "@/app/lib/addresses";
 import { ERC20_ABI } from "@/app/lib/constants";
 import { useTrackedWrite } from "./useTrackedWrite";
@@ -41,6 +41,13 @@ const DX_PROJECT_ABI = [
     inputs: [{ name: "epoch", type: "uint256" }],
     outputs: [],
   },
+  {
+    type: "function",
+    name: "admin",
+    stateMutability: "view",
+    inputs: [{ name: "", type: "address" }],
+    outputs: [{ type: "bool" }],
+  },
 ] as const;
 
 export const useDxBudget = (epoch?: bigint) => {
@@ -48,6 +55,16 @@ export const useDxBudget = (epoch?: bigint) => {
   const dxProject = ADDRESSES.dxProject;
   const ready = Boolean(treasury && dxProject);
   const { writeContractAsync, isPending } = useTrackedWrite();
+  const { address: account } = useAccount();
+
+  const { data: isAdminRaw } = useReadContract({
+    address: dxProject,
+    abi: DX_PROJECT_ABI,
+    functionName: "admin",
+    args: account ? [account] : undefined,
+    query: { enabled: Boolean(dxProject && account) },
+  });
+  const isAdmin = isAdminRaw === true;
 
   const { data: currentEpoch } = useReadContract({
     address: treasury,
@@ -102,6 +119,7 @@ export const useDxBudget = (epoch?: bigint) => {
 
   return {
     ready,
+    isAdmin,
     currentEpoch: currentEpoch as bigint | undefined,
     targetEpoch,
     claimable: claimable as bigint | undefined,

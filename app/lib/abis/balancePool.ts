@@ -1,0 +1,100 @@
+export const BALANCE_POOL_ABI = [
+  {
+    type: "function",
+    name: "activeBucket",
+    inputs: [],
+    outputs: [{ name: "", type: "uint8", internalType: "uint8" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "bucketCount",
+    inputs: [],
+    outputs: [{ name: "", type: "uint8", internalType: "uint8" }],
+    stateMutability: "pure",
+  },
+  {
+    type: "function",
+    name: "denomination",
+    inputs: [{ name: "bucket", type: "uint8", internalType: "uint8" }],
+    outputs: [{ name: "", type: "uint256", internalType: "uint256" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "currentRoot",
+    inputs: [{ name: "bucket", type: "uint8", internalType: "uint8" }],
+    outputs: [{ name: "", type: "bytes32", internalType: "bytes32" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "nextLeafIndex",
+    inputs: [{ name: "", type: "uint8", internalType: "uint8" }],
+    outputs: [{ name: "", type: "uint32", internalType: "uint32" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "deposits",
+    inputs: [
+      { name: "", type: "uint8", internalType: "uint8" },
+      { name: "", type: "uint32", internalType: "uint32" },
+    ],
+    outputs: [
+      { name: "depositor", type: "address", internalType: "address" },
+      { name: "commitment", type: "bytes32", internalType: "bytes32" },
+      { name: "withdrawn", type: "bool", internalType: "bool" },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "deposit",
+    inputs: [
+      { name: "bucket", type: "uint8", internalType: "uint8" },
+      { name: "commitment", type: "bytes32", internalType: "bytes32" },
+      { name: "siblings", type: "bytes32[20]", internalType: "bytes32[20]" },
+    ],
+    outputs: [{ name: "", type: "bytes32", internalType: "bytes32" }],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "withdraw",
+    inputs: [
+      { name: "bucket", type: "uint8", internalType: "uint8" },
+      { name: "index", type: "uint32", internalType: "uint32" },
+      { name: "siblings", type: "bytes32[20]", internalType: "bytes32[20]" },
+    ],
+    outputs: [{ name: "", type: "bytes32", internalType: "bytes32" }],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "event",
+    name: "Deposited",
+    inputs: [
+      { name: "bucket", type: "uint8", indexed: true, internalType: "uint8" },
+      { name: "commitment", type: "bytes32", indexed: false, internalType: "bytes32" },
+      { name: "leafIndex", type: "uint32", indexed: false, internalType: "uint32" },
+      { name: "root", type: "bytes32", indexed: false, internalType: "bytes32" },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "Withdrawn",
+    inputs: [
+      { name: "bucket", type: "uint8", indexed: true, internalType: "uint8" },
+      { name: "leafIndex", type: "uint32", indexed: false, internalType: "uint32" },
+      { name: "root", type: "bytes32", indexed: false, internalType: "bytes32" },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "ActiveBucketChanged",
+    inputs: [{ name: "bucket", type: "uint8", indexed: false, internalType: "uint8" }],
+    anonymous: false,
+  },
+] as const;

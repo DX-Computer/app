@@ -9,6 +9,11 @@ const BRIDGE_URL =
 let chipIdentity: Identity | null = null;
 let chipPostSecret: bigint | null = null;
 
+const STRICT_KEY = "dx-chip-strict";
+let strict =
+  typeof window !== "undefined" &&
+  window.localStorage.getItem(STRICT_KEY) === "1";
+
 const listeners = new Set<() => void>();
 
 export const subscribeIdentity = (cb: () => void): (() => void) => {
@@ -54,6 +59,22 @@ export const disconnectChip = (): void => {
   chipIdentity = null;
   chipPostSecret = null;
   notifyIdentity();
+};
+
+export const isStrictChip = (): boolean => strict;
+
+export const setStrictChip = (v: boolean): void => {
+  strict = v;
+  if (typeof window !== "undefined") {
+    window.localStorage.setItem(STRICT_KEY, v ? "1" : "0");
+  }
+  notifyIdentity();
+};
+
+export const ensureChipReady = async (): Promise<void> => {
+  if (!strict || !chipIdentity) return;
+  await fetch(`${BRIDGE_URL}/forget`).catch(() => null);
+  await connectChip();
 };
 
 export const getIdentity = (): Identity | null => chipIdentity;

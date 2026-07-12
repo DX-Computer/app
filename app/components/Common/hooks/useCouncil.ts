@@ -3,16 +3,19 @@ import { useReadContract, usePublicClient } from "wagmi";
 import { contractConfig } from "@/app/lib/contracts";
 import { ModalContext } from "@/app/providers";
 import { useTrackedWrite } from "./useTrackedWrite";
-import { ensureIdentity } from "@/app/lib/zk/identity";
+import { ensureChipReady, ensureIdentity } from "@/app/lib/zk/identity";
 import {
   buildGroup,
+  councilScope,
   generateScopedProof,
   toContractProof,
-  BALANCE_LINK_SCOPE,
+  scopeHash,
 } from "@/app/lib/zk/identityTree";
-import { buildBalanceProof } from "@/app/lib/zk/balanceTree";
+import { buildPoolProof, withdrawSlot } from "@/app/lib/zk/poolTree";
+import { toHex32 } from "@/app/lib/zk/poseidon";
 import { prove } from "@/app/lib/zk/prover";
 import { paymasterFields } from "@/app/lib/zk/paymaster";
+import { anonReady, anonWriteContract } from "@/app/lib/zk/anonSigner";
 import { useSubgraphQuery } from "./useSubgraphQuery";
 import { PROPOSALS_QUERY } from "@/app/lib/graphql/queries";
 
@@ -45,12 +48,6 @@ const useCouncil = () => {
   const { data: quorum } = useReadContract({
     ...base,
     functionName: "quorum",
-    query: { enabled: ready },
-  });
-
-  const { data: minBalanceRaw } = useReadContract({
-    ...base,
-    functionName: "minBalance",
     query: { enabled: ready },
   });
 
@@ -114,8 +111,16 @@ const useCouncil = () => {
     );
   };
 
-  const execute = async (proposalId: bigint) => {
+  const execute = async (proposalId: bigint, anonymous = false) => {
     if (!guard()) return;
+    if (anonymous && anonReady()) {
+      return anonWriteContract({
+        address: base.address,
+        abi: base.abi,
+        functionName: "execute",
+        args: [proposalId],
+      });
+    }
     return writeContractAsync({
       ...base,
       functionName: "execute",
@@ -128,6 +133,7 @@ const useCouncil = () => {
     ctx?.setTxStatus({ phase: "pending", message: "provingZk" });
     let identity;
     try {
+      await ensureChipReady();
       identity = ensureIdentity();
     } catch (e) {
       ctx?.setTxStatus({
@@ -142,21 +148,8 @@ const useCouncil = () => {
       return;
     }
 
-    const voteProof = await generateScopedProof(identity, group, BigInt(choice), proposalId);
-    if (!voteProof) {
-      ctx?.setTxStatus({ phase: "error", message: "chipNotEnrolled" });
-      return;
-    }
-    const balanceLinkProof = await generateScopedProof(identity, group, 0n, BALANCE_LINK_SCOPE);
-    if (!balanceLinkProof) {
-      ctx?.setTxStatus({ phase: "error", message: "chipNotEnrolled" });
-      return;
-    }
-
-    const balanceKey = BigInt(balanceLinkProof.nullifier);
-    const minBalance = typeof minBalanceRaw === "bigint" ? minBalanceRaw : 0n;
-
     let snapshotRoot: bigint | undefined;
+    let snapshotBucket: number | undefined;
     if (publicClient && council) {
       try {
         const p = (await publicClient.readContract({
@@ -165,12 +158,41 @@ const useCouncil = () => {
           args: [proposalId],
         })) as readonly unknown[];
         snapshotRoot = BigInt(p[1] as string | bigint);
+        snapshotBucket = Number(p[2] as number | bigint);
       } catch {}
     }
+    if (snapshotRoot === undefined || snapshotBucket === undefined) {
+      ctx?.setTxStatus({ phase: "error", message: "reverted" });
+      return;
+    }
 
-    const res = await buildBalanceProof(balanceKey, snapshotRoot);
+    let slot = await withdrawSlot(identity.secretScalar, snapshotBucket);
+    for (let attempt = 0; attempt < 3 && !slot.ok; attempt++) {
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      slot = await withdrawSlot(identity.secretScalar, snapshotBucket);
+    }
+    if (!slot.ok) {
+      ctx?.setTxStatus(null);
+      ctx?.setBalanceOpen(true);
+      return;
+    }
+
+    const scope = councilScope(council as Address, proposalId);
+    const voteProof = await generateScopedProof(identity, group, BigInt(choice), scope);
+    if (!voteProof) {
+      ctx?.setTxStatus({ phase: "error", message: "chipNotEnrolled" });
+      return;
+    }
+
+    let res = await buildPoolProof(identity.secretScalar, snapshotBucket, snapshotRoot);
+    for (let attempt = 0; attempt < 5 && !res.ok; attempt++) {
+      res = await buildPoolProof(identity.secretScalar, snapshotBucket);
+      if (!res.ok) {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+      }
+    }
     if (!res.ok) {
-      if (res.reason === "registeredLate") {
+      if (res.reason === "noSnapshot") {
         ctx?.setTxStatus({ phase: "error", message: "registeredLate" });
       } else {
         ctx?.setTxStatus(null);
@@ -178,20 +200,19 @@ const useCouncil = () => {
       }
       return;
     }
-    const balp = res.data;
 
-    let balanceZkProof;
+    let poolZkProof;
     try {
-      ({ proof: balanceZkProof } = await prove("voting", {
-        balance: balp.balance.toString(),
-        bal_siblings: balp.proof.siblings.map((s) => s.toString()),
-        bal_indices: balp.proof.indices,
-        balance_root: balp.root.toString(),
-        min_balance: minBalance.toString(),
-        balance_key: balanceKey.toString(),
+      ({ proof: poolZkProof } = await prove("voting", {
+        identity_secret: identity.secretScalar.toString(),
+        deposit_r: res.r!.toString(),
+        siblings: res.data.proof.siblings.map((s) => s.toString()),
+        indices: res.data.proof.indices,
+        pool_root: res.data.root.toString(),
+        scope_hash: scopeHash(scope).toString(),
       }));
     } catch (e) {
-      console.log("vote: balance proof failed", e);
+      console.log("vote: pool proof failed", e);
       ctx?.setTxStatus({ phase: "error", message: "reverted" });
       return;
     }
@@ -200,15 +221,27 @@ const useCouncil = () => {
       {
         ...base,
         functionName: "vote",
-        args: [
-          toContractProof(voteProof),
-          toContractProof(balanceLinkProof),
-          balanceZkProof,
-          proposalId,
-        ],
+        args: [toContractProof(voteProof), poolZkProof, toHex32(res.data.root), proposalId],
         ...paymasterFields(),
       } as never,
       { anon: true },
+    );
+  };
+
+  const proposeBucket = async (
+    newBucket: number,
+    contentUri: string,
+    anonymous = false,
+  ) => {
+    if (!guard()) return;
+    return writeContractAsync(
+      {
+        ...base,
+        functionName: "proposeBucket",
+        args: [newBucket, contentUri],
+        ...(anonymous ? paymasterFields() : {}),
+      } as never,
+      { anon: anonymous },
     );
   };
 
@@ -225,6 +258,7 @@ const useCouncil = () => {
     proposeQuorum,
     proposeWindow,
     proposeBan,
+    proposeBucket,
     execute,
     vote,
     canVote: ready,

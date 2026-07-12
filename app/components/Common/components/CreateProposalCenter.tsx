@@ -34,7 +34,9 @@ const CreateProposalCenter: FunctionComponent = (): JSX.Element => {
     { key: "ban", label: d.kindBan },
     { key: "quorum", label: d.kindQuorum },
     { key: "window", label: d.kindWindow },
+    { key: "bucket", label: d.kindBucket },
   ];
+  const BUCKETS = ["0.01", "0.1", "0.25", "0.5", "0.75", "1", "5", "7", "10"];
   const conn = s.conn;
   const c = useCouncil();
   const router = useRouter();
@@ -51,6 +53,7 @@ const CreateProposalCenter: FunctionComponent = (): JSX.Element => {
   const [windowMin, setWindowMin] = useState<string>("");
   const [banned, setBanned] = useState<boolean>(true);
   const [actor, setActor] = useState<string>("");
+  const [bucket, setBucket] = useState<number>(0);
   const [mode, setMode] = useState<"public" | "anonymous">("public");
 
   const [title, setTitle] = useState<string>("");
@@ -73,6 +76,7 @@ const CreateProposalCenter: FunctionComponent = (): JSX.Element => {
     if (kind === "quorum") return isUint(value);
     if (kind === "ban") return isAddr(actor);
     if (kind === "window") return isUint(windowMin) && Number(windowMin) >= 1;
+    if (kind === "bucket") return bucket >= 0 && bucket < BUCKETS.length;
     return false;
   };
 
@@ -91,6 +95,8 @@ const CreateProposalCenter: FunctionComponent = (): JSX.Element => {
         await c.proposeBan(actor.trim() as Address, banned, uri, anon);
       } else if (kind === "window") {
         await c.proposeWindow(BigInt(windowMin) * 60n, uri, anon);
+      } else if (kind === "bucket") {
+        await c.proposeBucket(bucket, uri, anon);
       }
       router.push(`/${s.lang}/govern`);
     } catch {}
@@ -123,21 +129,24 @@ const CreateProposalCenter: FunctionComponent = (): JSX.Element => {
           </div>
 
           <div className="relative flex flex-col gap-1">
-            <span className={tag}>{d.visibility}</span>
+            <span className={tag}>{d.submitLabel}</span>
             <div className="relative flex flex-row gap-1">
               <button
                 onClick={() => setMode("public")}
                 className={chip(mode === "public")}
               >
-                {d.visibilityPublic}
+                {d.submitPublic}
               </button>
               <button
                 onClick={() => setMode("anonymous")}
                 className={chip(mode === "anonymous")}
               >
-                {d.visibilityAnonymous}
+                {d.submitAnon}
               </button>
             </div>
+            <span className="relative flex text-[10px] text-gray-500 leading-relaxed">
+              {d.submitHint}
+            </span>
           </div>
 
           {kind === "quorum" && (
@@ -163,6 +172,26 @@ const CreateProposalCenter: FunctionComponent = (): JSX.Element => {
               />
               <span className="relative flex text-[10px] text-gray-500 leading-relaxed">
                 {d.windowNote}
+              </span>
+            </div>
+          )}
+
+          {kind === "bucket" && (
+            <div className="relative flex flex-col gap-1">
+              <span className={tag}>{d.newBucket}</span>
+              <select
+                value={bucket}
+                onChange={(e) => setBucket(Number(e.target.value))}
+                className={inp}
+              >
+                {BUCKETS.map((b, i) => (
+                  <option key={i} value={i}>
+                    {i} · {b} MONA
+                  </option>
+                ))}
+              </select>
+              <span className="relative flex text-[10px] text-gray-500 leading-relaxed">
+                {d.bucketNote}
               </span>
             </div>
           )}

@@ -1,12 +1,12 @@
 "use client";
 
 import { FunctionComponent, JSX, useState } from "react";
-import { usePublicClient } from "wagmi";
+import { usePublicClient, useReadContract } from "wagmi";
 import { useQuery } from "@tanstack/react-query";
 import { parseAbiItem } from "viem";
 import { contractConfig } from "@/app/lib/contracts";
 import { getIdentity } from "@/app/lib/zk/identity";
-import { semaphoreNullifier } from "@/app/lib/zk/identityTree";
+import { councilScope, semaphoreNullifier } from "@/app/lib/zk/identityTree";
 import { countdown } from "@/app/lib/countdown";
 import useChainClock from "../hooks/useChainClock";
 import Caja from "./Caja";
@@ -34,6 +34,8 @@ type ProposalDict = ReturnType<typeof useShell>["dict"]["proposal"];
 
 const short = (a?: string): string =>
   a ? `${a.slice(0, 6)}…${a.slice(-4)}` : "—";
+
+const BUCKETS = ["0.01", "0.1", "0.25", "0.5", "0.75", "1", "5", "7", "10"];
 const fmtTime = (ts?: number): string => {
   if (!ts) return "—";
   return new Date(ts * 1000).toISOString().slice(0, 16).replace("T", " ");
@@ -47,6 +49,10 @@ const describe = (p: ProposalSummary, d: ProposalDict): string => {
   if (p.kind === 1) return fmt(d.describeQuorum, { value: p.value });
   if (p.kind === 2)
     return fmt(d.describeWindow, { minutes: Math.round(Number(p.value) / 60) });
+  if (p.kind === 3)
+    return fmt(d.describeBucket, {
+      amount: BUCKETS[Number(p.value)] ?? p.value,
+    });
   return "—";
 };
 
@@ -55,7 +61,7 @@ const ProposalDetailCenter: FunctionComponent<{ id: string }> = ({
 }): JSX.Element => {
   const s = useShell();
   const d = s.dict.proposal;
-  const KIND = [d.kindBan, d.kindQuorum, d.kindWindow];
+  const KIND = [d.kindBan, d.kindQuorum, d.kindWindow, d.kindBucket];
   const conn = s.conn;
   const { proposal: p, refetch } = useProposal(id);
   const now = useChainClock();
@@ -66,13 +72,35 @@ const ProposalDetailCenter: FunctionComponent<{ id: string }> = ({
 
   const publicClient = usePublicClient();
   const [confirmChoice, setConfirmChoice] = useState<0 | 1 | null>(null);
+  const councilCfg = contractConfig("dxCouncil");
+  const { data: yesRaw, refetch: refetchYes } = useReadContract({
+    address: councilCfg.address,
+    abi: councilCfg.abi,
+    functionName: "tally",
+    args: [BigInt(id || "0"), 1],
+    query: { enabled: councilCfg.ready && id !== "", refetchInterval: 5000 },
+  });
+  const { data: noRaw, refetch: refetchNo } = useReadContract({
+    address: councilCfg.address,
+    abi: councilCfg.abi,
+    functionName: "tally",
+    args: [BigInt(id || "0"), 0],
+    query: { enabled: councilCfg.ready && id !== "", refetchInterval: 5000 },
+  });
+  const [execMode, setExecMode] = useState<"public" | "anonymous">(
+    anonReady() ? "anonymous" : "public",
+  );
+  const [execBusy, setExecBusy] = useState<boolean>(false);
   const council = contractConfig("dxCouncil");
   const { data: myVote, refetch: refetchVote } = useQuery({
     queryKey: ["my-vote", id, signer.commitment],
     queryFn: async (): Promise<number> => {
       const identity = getIdentity();
       if (!identity || !publicClient || !council.ready) return -1;
-      const mine = semaphoreNullifier(BigInt(id), identity.secretScalar);
+      const mine = semaphoreNullifier(
+        councilScope(council.address as `0x${string}`, BigInt(id)),
+        identity.secretScalar,
+      );
       const logs = await publicClient.getLogs({
         address: council.address as `0x${string}`,
         event: parseAbiItem(
@@ -104,8 +132,10 @@ const ProposalDetailCenter: FunctionComponent<{ id: string }> = ({
     idn.enrolled &&
     (anonReady() || (conn.isConnected && !conn.wrongNetwork));
   const stateText = p.executed ? d.stateExecuted : open ? d.stateOpen : d.stateClosed;
-  const total = p.yes + p.no;
-  const pct = total > 0 ? (p.yes / total) * 100 : 0;
+  const yes = typeof yesRaw === "bigint" ? Number(yesRaw) : p.yes;
+  const no = typeof noRaw === "bigint" ? Number(noRaw) : p.no;
+  const total = yes + no;
+  const pct = total > 0 ? (yes / total) * 100 : 0;
   const quorum = typeof c.quorum === "bigint" ? Number(c.quorum) : 0;
 
   const txHref = txUrl(p.tx);
@@ -129,22 +159,36 @@ const ProposalDetailCenter: FunctionComponent<{ id: string }> = ({
       await c.vote(BigInt(p.id), choice);
       refetch();
       refetchVote();
+      refetchYes();
+      refetchNo();
     } catch {}
   };
 
+  const execAnon = execMode === "anonymous" && anonReady();
+
   const doExecute = async (): Promise<void> => {
-    if (!conn.isConnected) {
-      conn.connect();
-      return;
+    if (execAnon) {
+      if (!signer.connected) {
+        await signer.connect();
+        return;
+      }
+    } else {
+      if (!conn.isConnected) {
+        conn.connect();
+        return;
+      }
+      if (conn.wrongNetwork) {
+        conn.switchNetwork();
+        return;
+      }
     }
-    if (conn.wrongNetwork) {
-      conn.switchNetwork();
-      return;
-    }
+    setExecBusy(true);
     try {
-      await c.execute(BigInt(p.id));
+      await c.execute(BigInt(p.id), execAnon);
       refetch();
-    } catch {}
+    } catch {} finally {
+      setExecBusy(false);
+    }
   };
 
   return (
@@ -223,8 +267,8 @@ const ProposalDetailCenter: FunctionComponent<{ id: string }> = ({
               <span className="relative flex">{fmt(s.dict.proposal.quorum, { quorum: quorum || "—" })}</span>
             </div>
             <div className="relative flex flex-row flex-wrap gap-x-4 text-xs">
-              <span className="relative flex">✓ {p.yes}</span>
-              <span className="relative flex">✗ {p.no}</span>
+              <span className="relative flex">✓ {yes}</span>
+              <span className="relative flex">✗ {no}</span>
             </div>
             <div className="relative flex w-full h-1 bg-white/10">
               <div
@@ -313,15 +357,45 @@ const ProposalDetailCenter: FunctionComponent<{ id: string }> = ({
             </Caja>
           )}
 
-          {closed && (
+          {closed && !(yes >= quorum && yes > no) && (
+            <Caja bg="bg" className="flex-col gap-2 p-3">
+              <span className={label}>{s.dict.proposal.stateRejected}</span>
+            </Caja>
+          )}
+
+          {closed && yes >= quorum && yes > no && (
             <Caja bg="bg" className="flex-col gap-2 p-3">
               <span className={label}>{s.dict.proposal.votingClosed}</span>
+              <div className="relative flex flex-row gap-1 flex-wrap">
+                <button
+                  onClick={() => setExecMode("public")}
+                  className={`relative flex bg-white/10 px-2 py-1 text-[10px] cursor-blacksmithHS ${
+                    execMode === "public" ? "text-white" : "text-gray-500"
+                  }`}
+                >
+                  {s.dict.createProposal.submitPublic}
+                </button>
+                <button
+                  onClick={() => setExecMode("anonymous")}
+                  className={`relative flex bg-white/10 px-2 py-1 text-[10px] cursor-blacksmithHS ${
+                    execMode === "anonymous" ? "text-white" : "text-gray-500"
+                  }`}
+                >
+                  {s.dict.createProposal.submitAnon}
+                </button>
+              </div>
               <button
                 onClick={doExecute}
-                disabled={c.isPending}
-                className={`${btn} w-fit ${c.isPending ? "opacity-40" : ""}`}
+                disabled={execBusy || c.isPending}
+                className={`${btn} w-fit ${execBusy || c.isPending ? "opacity-40" : ""}`}
               >
-                {!conn.isConnected
+                {execBusy || c.isPending
+                  ? s.dict.proposal.executing
+                  : execAnon
+                  ? !signer.connected
+                    ? s.dict.connection.chip
+                    : s.dict.proposal.execute
+                  : !conn.isConnected
                   ? s.dict.connection.connectWallet
                   : conn.wrongNetwork
                   ? s.dict.connection.switchChain

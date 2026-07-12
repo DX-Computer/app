@@ -1,6 +1,12 @@
 "use client";
 
-import { FunctionComponent, JSX, ReactNode } from "react";
+import {
+  FunctionComponent,
+  JSX,
+  ReactNode,
+  useEffect,
+  useState,
+} from "react";
 import Link from "next/link";
 import { formatUnits } from "viem";
 import Caja from "./Caja";
@@ -8,6 +14,7 @@ import { useShell } from "./Shell";
 import { fmt } from "../hooks/fmt";
 import useDashboard from "../hooks/useDashboard";
 import useChip from "../hooks/useChip";
+import usePool from "../hooks/usePool";
 import useGrantRewards from "../hooks/useGrantRewards";
 import useGrants from "../hooks/useGrants";
 import useDxBudget from "../hooks/useDxBudget";
@@ -44,6 +51,17 @@ const DashboardCenter: FunctionComponent<{ theme: DashboardTheme }> = ({
   const grantRewards = useGrantRewards(data.fundedGrants.map((g) => g.id));
   const grants = useGrants();
   const budget = useDxBudget();
+  const pool = usePool();
+  const [poolDeposited, setPoolDeposited] = useState<boolean>(false);
+  const [view, setView] = useState<"public" | "anonymous">(
+    conn.isConnected ? "public" : "anonymous",
+  );
+
+  useEffect(() => {
+    if (chip.connected) {
+      pool.hasDeposit().then(setPoolDeposited);
+    }
+  }, [chip.connected, pool.activeBucket, pool.isPending]);
 
   const claimGrant = async (grantId: string): Promise<void> => {
     try {
@@ -85,7 +103,7 @@ const DashboardCenter: FunctionComponent<{ theme: DashboardTheme }> = ({
     </span>
   );
 
-  const budgetSection = budget.ready
+  const budgetSection = budget.ready && budget.isAdmin
     ? section(
         s.dict.dashboard.matroidBudget,
         <>
@@ -117,9 +135,71 @@ const DashboardCenter: FunctionComponent<{ theme: DashboardTheme }> = ({
       )
     : null;
 
+  const poolSection =
+    pool.ready && poolDeposited
+      ? section(
+          s.dict.balance.title,
+          <>
+            <div className={row}>
+              <span className="relative flex text-[10px] text-green-400">
+                ✓ {s.dict.balance.deposited}
+              </span>
+              <span className={label}>
+                {formatUnits(
+                  typeof pool.denomination === "bigint" ? pool.denomination : 0n,
+                  18,
+                )}{" "}
+                MONA
+              </span>
+            </div>
+            <div className="relative flex flex-row flex-wrap gap-2">
+              <button
+                type="button"
+                className={btn}
+                onClick={() =>
+                  !conn.isConnected
+                    ? conn.connect()
+                    : conn.wrongNetwork
+                    ? conn.switchNetwork()
+                    : pool.withdraw()
+                }
+                disabled={pool.isPending}
+              >
+                {!conn.isConnected
+                  ? s.dict.connection.connectWallet
+                  : conn.wrongNetwork
+                  ? s.dict.connection.switchChain
+                  : pool.isPending
+                  ? s.dict.balance.withdrawing
+                  : s.dict.balance.withdraw}
+              </button>
+            </div>
+          </>,
+        )
+      : null;
+
   return (
     <Caja className="flex-col flex-1 gap-2 p-4">
-      {budgetSection}
+      <div className="relative flex flex-row gap-1">
+        <button
+          onClick={() => setView("public")}
+          className={`relative flex bg-white/10 px-2 py-1 text-[10px] cursor-blacksmithHS ${
+            view === "public" ? "text-white" : "text-gray-500"
+          }`}
+        >
+          {s.dict.createProposal.visibilityPublic}
+        </button>
+        <button
+          onClick={() => setView("anonymous")}
+          className={`relative flex bg-white/10 px-2 py-1 text-[10px] cursor-blacksmithHS ${
+            view === "anonymous" ? "text-white" : "text-gray-500"
+          }`}
+        >
+          {s.dict.createProposal.visibilityAnonymous}
+        </button>
+      </div>
+      {view === "public" && budgetSection}
+      {view === "anonymous" && poolSection}
       {theme === "launches" && (
         <>
           {section(

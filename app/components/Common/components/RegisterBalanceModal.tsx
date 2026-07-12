@@ -1,6 +1,6 @@
 "use client";
 
-import { CSSProperties, FunctionComponent, JSX } from "react";
+import { CSSProperties, FunctionComponent, JSX, useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useAccount, useReadContract } from "wagmi";
 import { formatUnits } from "viem";
@@ -8,7 +8,7 @@ import Marco from "./Marco";
 import useConnection from "../hooks/useConnection";
 import useChip from "../hooks/useChip";
 import useIdentity from "../hooks/useIdentity";
-import useBalanceTree from "../hooks/useBalanceTree";
+import usePool from "../hooks/usePool";
 import { contractConfig } from "@/app/lib/contracts";
 import { ACTIVE_CHAIN, LOCALES } from "@/app/lib/constants";
 import en from "@/app/dictionaries/en.json";
@@ -44,7 +44,8 @@ const RegisterBalanceModal: FunctionComponent<Props> = ({
   const conn = useConnection();
   const chip = useChip();
   const idn = useIdentity(chip.commitment);
-  const tree = useBalanceTree();
+  const pool = usePool();
+  const [deposited, setDeposited] = useState(false);
 
   const { address: account } = useAccount();
   const monaCfg = contractConfig("mona");
@@ -57,17 +58,24 @@ const RegisterBalanceModal: FunctionComponent<Props> = ({
     query: { enabled: Boolean(monaCfg.ready && account && open) },
   });
   const balance = typeof balRaw === "bigint" ? balRaw : 0n;
+  const denom = typeof pool.denomination === "bigint" ? pool.denomination : 0n;
+
+  useEffect(() => {
+    if (!open || !chip.connected || !idn.enrolled) return;
+    pool.hasDeposit().then(setDeposited);
+  }, [open, chip.connected, idn.enrolled, pool.activeBucket]);
 
   if (!open) return null;
 
   const ready =
     conn.isConnected && !conn.wrongNetwork && chip.connected && idn.enrolled;
-  const noMona = conn.isConnected && !conn.wrongNetwork && balance === 0n;
+  const noMona =
+    conn.isConnected && !conn.wrongNetwork && denom > 0n && balance < denom;
 
-  const doRegister = async (): Promise<void> => {
+  const doDeposit = async (): Promise<void> => {
     try {
-      await tree.register();
-      onClose();
+      await pool.deposit();
+      setDeposited(true);
     } catch {}
   };
 
@@ -77,7 +85,7 @@ const RegisterBalanceModal: FunctionComponent<Props> = ({
     ? { text: c.switchChain, run: conn.switchNetwork }
     : !chip.connected
     ? { text: c.chip, run: () => chip.connect() }
-    : { text: tree.isPending ? d.registering : d.register, run: doRegister };
+    : { text: pool.isPending ? d.registering : d.register, run: doDeposit };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
@@ -120,6 +128,11 @@ const RegisterBalanceModal: FunctionComponent<Props> = ({
                   : c.notConnected}{" "}
                 · {c.chip}
               </span>
+              {denom > 0n && (
+                <span className="relative flex text-[10px] text-gray-300">
+                  {d.denomination}: {Number(formatUnits(denom, 18)).toLocaleString()} MONA
+                </span>
+              )}
               {conn.isConnected && (
                 <span
                   className={`relative flex text-[10px] ${
@@ -130,23 +143,35 @@ const RegisterBalanceModal: FunctionComponent<Props> = ({
                   {Number(formatUnits(balance, 18)).toLocaleString()} MONA
                 </span>
               )}
+              {deposited && (
+                <span className="relative flex text-[10px] text-green-400">
+                  ✓ {d.deposited}
+                </span>
+              )}
             </div>
 
             {noMona && (
               <span className={`${label} text-red-400`}>{d.noMona}</span>
             )}
 
-            <button
-              onClick={primary.run}
-              disabled={tree.isPending || (ready && noMona)}
-              className={`${actionBtn} self-start ${
-                tree.isPending || (ready && noMona) ? "opacity-40" : ""
-              }`}
-            >
-              {primary.text}
-            </button>
+            <div className="relative flex flex-row gap-2 flex-wrap">
+              {!deposited && (
+                <button
+                  onClick={primary.run}
+                  disabled={pool.isPending || (ready && noMona)}
+                  className={`${actionBtn} self-start ${
+                    pool.isPending || (ready && noMona) ? "opacity-40" : ""
+                  }`}
+                >
+                  {primary.text}
+                </button>
+              )}
+              {deposited && (
+                <span className={label}>{d.withdrawNote}</span>
+              )}
+            </div>
 
-            {ready && !noMona && (
+            {ready && !noMona && !deposited && (
               <span className={label}>{d.readyHint}</span>
             )}
           </div>

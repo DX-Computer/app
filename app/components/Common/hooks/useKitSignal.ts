@@ -2,7 +2,7 @@ import { useContext } from "react";
 import { useAccount, useReadContract } from "wagmi";
 import { contractConfig } from "@/app/lib/contracts";
 import { ModalContext } from "@/app/providers";
-import { ensureIdentity, getIdentity } from "@/app/lib/zk/identity";
+import { ensureChipReady, ensureIdentity, getIdentity } from "@/app/lib/zk/identity";
 import { buildGroup, generateScopedProof, toContractProof, semaphoreNullifier } from "@/app/lib/zk/identityTree";
 import { paymasterFields } from "@/app/lib/zk/paymaster";
 import { useTrackedWrite } from "./useTrackedWrite";
@@ -100,6 +100,7 @@ const useKitSignal = (kitId?: bigint) => {
       openWalkthrough();
       return;
     }
+    await ensureChipReady();
     const identity = ensureIdentity();
     const group = await buildGroup();
     if (!group) {

@@ -25,6 +25,19 @@ export class IncrementalMerkleTree {
     return this.leaves.length - 1;
   }
 
+  update(index: number, leaf: bigint): void {
+    if (index >= 0 && index < this.leaves.length) {
+      this.leaves[index] = leaf;
+    }
+  }
+
+  proofForNext(): MerkleProof {
+    this.leaves.push(0n);
+    const p = this.proof(this.leaves.length - 1);
+    this.leaves.pop();
+    return p;
+  }
+
   indexOf(leaf: bigint): number {
     return this.leaves.findIndex((x) => x === leaf);
   }

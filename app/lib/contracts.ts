@@ -10,7 +10,7 @@ import { MATROID_PAYMASTER_ABI } from "./abis/matroidPaymaster";
 import { DX_COUNCIL_ABI } from "./abis/dxCouncil";
 import { CYBERSWAGMAN_REGISTRY_ABI } from "./abis/cyberswagmanRegistry";
 import { IDENTITY_REGISTRY_ABI } from "./abis/identityRegistry";
-import { MONA_BALANCE_TREE_ABI } from "./abis/monaBalanceTree";
+import { BALANCE_POOL_ABI } from "./abis/balancePool";
 
 export const ABIS = {
   mona: ERC20_ABI,
@@ -24,7 +24,7 @@ export const ABIS = {
   dxCouncil: DX_COUNCIL_ABI,
   cyberswagmanRegistry: CYBERSWAGMAN_REGISTRY_ABI,
   identityRegistry: IDENTITY_REGISTRY_ABI,
-  monaBalanceTree: MONA_BALANCE_TREE_ABI,
+  balancePool: BALANCE_POOL_ABI,
 } as const;
 
 export type AbiKey = keyof typeof ABIS;
