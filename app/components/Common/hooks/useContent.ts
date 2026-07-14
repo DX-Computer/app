@@ -1,19 +1,25 @@
 import { useContext } from "react";
-import { useReadContract } from "wagmi";
-import { keccak256, stringToHex } from "viem";
+import { usePublicClient, useReadContract } from "wagmi";
+import {
+  encodeAbiParameters,
+  keccak256,
+  sliceHex,
+  stringToHex,
+  type Hex,
+} from "viem";
 import { ModalContext } from "@/app/providers";
 import { contractConfig } from "@/app/lib/contracts";
-import { ensureChipReady, ensureIdentity, ownerTagFor, editProofInputs } from "@/app/lib/zk/identity";
+import { ACTIVE_CHAIN } from "@/app/lib/constants";
+import { ownerTagFor, editProofInputs } from "@/app/lib/zk/identity";
 import { circuitAvailable, prove } from "@/app/lib/zk/prover";
-import {
-  buildGroup,
-  generateScopedProof,
-  toContractProof,
-  POST_SCOPE,
-} from "@/app/lib/zk/identityTree";
+import { chipActionProof } from "@/app/lib/zk/chipAction";
+import { buildIdentityTree } from "@/app/lib/zk/chipEnrollments";
 import { toHex32 } from "@/app/lib/zk/poseidon";
 import { paymasterFields } from "@/app/lib/zk/paymaster";
 import { useTrackedWrite } from "./useTrackedWrite";
+
+const POST_TAG = sliceHex(keccak256(stringToHex("contentRegistry.post")), 0, 4);
+const EDIT_TAG = sliceHex(keccak256(stringToHex("contentRegistry.edit")), 0, 4);
 
 const FIELD =
   21888242871839275222246405745257275088548364400416034343698204186575808495617n;
@@ -25,7 +31,9 @@ type Hash = `0x${string}`;
 
 const useContent = () => {
   const { address, abi, ready } = contractConfig("contentRegistry");
+  const registry = contractConfig("identityRegistry");
   const base = { address: address as Hash, abi } as const;
+  const client = usePublicClient();
   const { writeContractAsync, isPending, error } = useTrackedWrite();
   const ctx = useContext(ModalContext);
 
@@ -35,10 +43,6 @@ const useContent = () => {
     query: { enabled: ready },
   });
   const count = typeof countRaw === "bigint" ? countRaw : 0n;
-
-  const note = ready
-    ? "anonymous · proven from your identity"
-    : "set NEXT_PUBLIC_CONTENT_REGISTRY";
 
   const ZERO_TAG =
     "0x0000000000000000000000000000000000000000000000000000000000000000" as Hash;
@@ -53,28 +57,54 @@ const useContent = () => {
       console.log("contentRegistry address not configured");
       return;
     }
-    await ensureChipReady();
-    const identity = ensureIdentity();
-    const group = await buildGroup();
-    if (!group) {
-      console.log("post: no identities enrolled on-chain yet");
+    if (!registry.ready || !client) {
+      console.log("identityRegistry not configured");
       return;
     }
     const contentHash = contentField(text);
-    ctx?.setTxStatus({ phase: "pending", message: "provingZk" });
-    const proof = await generateScopedProof(identity, group, contentHash, POST_SCOPE);
-    if (!proof) {
-      console.log("post: this identity is not enrolled on-chain yet");
-      return;
-    }
     const ownerTag = ownerTagFor(contentHash);
+    ctx?.setTxStatus({ phase: "pending", message: "provingZk" });
+    const { tree, leaves } = await buildIdentityTree(
+      client,
+      registry.address as Hex,
+    );
+    const payloadHash = keccak256(
+      encodeAbiParameters(
+        [
+          { type: "bytes32" },
+          { type: "bytes32" },
+          { type: "bytes32" },
+          { type: "bytes32" },
+          { type: "bytes32" },
+        ],
+        [
+          toHex32(contentHash),
+          toHex32(ownerTag),
+          canonicalTag,
+          moderatorTag ?? ZERO_TAG,
+          keccak256(stringToHex(contentUri)),
+        ],
+      ),
+    );
+    const res = await chipActionProof({
+      contract: address as Hex,
+      chainId: ACTIVE_CHAIN.id,
+      actionTag: POST_TAG,
+      scopeSeed: 0n,
+      payloadHash,
+      label: "post",
+      tree,
+      leaves,
+    });
 
     return writeContractAsync(
       {
         ...base,
         functionName: "post",
         args: [
-          toContractProof(proof),
+          res.proof,
+          res.merkleRoot,
+          res.nullifier,
           toHex32(contentHash),
           toHex32(ownerTag),
           canonicalTag,
@@ -123,6 +153,26 @@ const useContent = () => {
   const ZERO32 =
     "0x0000000000000000000000000000000000000000000000000000000000000000" as Hash;
 
+  const chipEdit = async (payloadHash: Hash, label: string) => {
+    if (!registry.ready || !client) {
+      throw new Error("registryMissing");
+    }
+    const { tree, leaves } = await buildIdentityTree(
+      client,
+      registry.address as Hex,
+    );
+    return chipActionProof({
+      contract: address as Hex,
+      chainId: ACTIVE_CHAIN.id,
+      actionTag: EDIT_TAG,
+      scopeSeed: BigInt(payloadHash),
+      payloadHash,
+      label,
+      tree,
+      leaves,
+    });
+  };
+
   const remove = async (
     id: string,
     contentHash: string,
@@ -134,23 +184,41 @@ const useContent = () => {
       return;
     }
     let proof: Hash = "0x";
-    if (await circuitAvailable("edit")) {
-      try {
-        ctx?.setTxStatus({ phase: "pending", message: "provingZk" });
-        await ensureChipReady();
+    let action;
+    try {
+      ctx?.setTxStatus({ phase: "pending", message: "provingZk" });
+      if (await circuitAvailable("edit")) {
         const inputs = editProofInputs(contentHash, ownerTag, ZERO32, "0");
         proof = (await prove("edit", inputs)).proof;
-      } catch (e) {
-        console.log("comment remove proof failed", e);
-        ctx?.setTxStatus({ phase: "error", message: "reverted" });
-        return;
       }
+      const payloadHash = keccak256(
+        encodeAbiParameters(
+          [{ type: "uint256" }, { type: "bytes32" }, { type: "uint64" }],
+          [BigInt(id), ZERO32, 0n],
+        ),
+      );
+      action = await chipEdit(payloadHash, "edit");
+    } catch (e) {
+      console.log("comment remove proof failed", e);
+      ctx?.setTxStatus({
+        phase: "error",
+        message: e instanceof Error ? e.message : "actFailed",
+      });
+      return;
     }
     return writeContractAsync(
       {
         ...base,
         functionName: "update",
-        args: [BigInt(id), proof, ZERO32, 0n],
+        args: [
+          BigInt(id),
+          proof,
+          action.proof,
+          action.merkleRoot,
+          action.nullifier,
+          ZERO32,
+          0n,
+        ],
       },
       { successNote: note, anon: true },
     );
@@ -167,10 +235,10 @@ const useContent = () => {
       return;
     }
     let proof: Hash = "0x";
-    if (await circuitAvailable("edit")) {
-      try {
-        ctx?.setTxStatus({ phase: "pending", message: "provingZk" });
-        await ensureChipReady();
+    let action;
+    try {
+      ctx?.setTxStatus({ phase: "pending", message: "provingZk" });
+      if (await circuitAvailable("edit")) {
         const inputs = editProofInputs(
           anchor,
           canonicalTag,
@@ -178,17 +246,30 @@ const useContent = () => {
           "0",
         );
         proof = (await prove("edit", inputs)).proof;
-      } catch (e) {
-        console.log("moderate proof failed", e);
-        ctx?.setTxStatus({ phase: "error", message: "reverted" });
-        return;
       }
+      const payloadHash = keccak256(
+        encodeAbiParameters([{ type: "uint256" }], [BigInt(id)]),
+      );
+      action = await chipEdit(payloadHash, "moderate");
+    } catch (e) {
+      console.log("moderate proof failed", e);
+      ctx?.setTxStatus({
+        phase: "error",
+        message: e instanceof Error ? e.message : "actFailed",
+      });
+      return;
     }
     return writeContractAsync(
       {
         ...base,
         functionName: "moderate",
-        args: [BigInt(id), proof],
+        args: [
+          BigInt(id),
+          proof,
+          action.proof,
+          action.merkleRoot,
+          action.nullifier,
+        ],
         ...paymasterFields(),
       } as never,
       { successNote: note, anon: true },
@@ -198,7 +279,6 @@ const useContent = () => {
   return {
     ready,
     count,
-    note,
     isPending,
     error,
     canPost: ready,

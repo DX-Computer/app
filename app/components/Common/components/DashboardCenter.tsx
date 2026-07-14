@@ -52,15 +52,16 @@ const DashboardCenter: FunctionComponent<{ theme: DashboardTheme }> = ({
   const grants = useGrants();
   const budget = useDxBudget();
   const pool = usePool();
-  const [poolDeposited, setPoolDeposited] = useState<boolean>(false);
+  const [poolDeposits, setPoolDeposits] = useState<
+    { bucket: number; denomination: bigint }[]
+  >([]);
   const [view, setView] = useState<"public" | "anonymous">(
     conn.isConnected ? "public" : "anonymous",
   );
 
   useEffect(() => {
-    if (chip.connected) {
-      pool.hasDeposit().then(setPoolDeposited);
-    }
+    if (!chip.connected) return;
+    pool.deposits().then(setPoolDeposits);
   }, [chip.connected, pool.activeBucket, pool.isPending]);
 
   const claimGrant = async (grantId: string): Promise<void> => {
@@ -136,44 +137,40 @@ const DashboardCenter: FunctionComponent<{ theme: DashboardTheme }> = ({
     : null;
 
   const poolSection =
-    pool.ready && poolDeposited
+    pool.ready && poolDeposits.length > 0
       ? section(
           s.dict.balance.title,
           <>
-            <div className={row}>
-              <span className="relative flex text-[10px] text-green-400">
-                ✓ {s.dict.balance.deposited}
-              </span>
-              <span className={label}>
-                {formatUnits(
-                  typeof pool.denomination === "bigint" ? pool.denomination : 0n,
-                  18,
-                )}{" "}
-                MONA
-              </span>
-            </div>
-            <div className="relative flex flex-row flex-wrap gap-2">
-              <button
-                type="button"
-                className={btn}
-                onClick={() =>
-                  !conn.isConnected
-                    ? conn.connect()
+            {poolDeposits.map((dep) => (
+              <div key={dep.bucket} className={row}>
+                <span className="relative flex text-[10px] text-green-400">
+                  ✓ {s.dict.balance.deposited}
+                </span>
+                <span className={`${label} flex-1`}>
+                  {formatUnits(dep.denomination, 18)} MONA
+                </span>
+                <button
+                  type="button"
+                  className={btn}
+                  onClick={() =>
+                    !conn.isConnected
+                      ? conn.connect()
+                      : conn.wrongNetwork
+                      ? conn.switchNetwork()
+                      : pool.withdraw(dep.bucket)
+                  }
+                  disabled={pool.isPending}
+                >
+                  {!conn.isConnected
+                    ? s.dict.connection.connectWallet
                     : conn.wrongNetwork
-                    ? conn.switchNetwork()
-                    : pool.withdraw()
-                }
-                disabled={pool.isPending}
-              >
-                {!conn.isConnected
-                  ? s.dict.connection.connectWallet
-                  : conn.wrongNetwork
-                  ? s.dict.connection.switchChain
-                  : pool.isPending
-                  ? s.dict.balance.withdrawing
-                  : s.dict.balance.withdraw}
-              </button>
-            </div>
+                    ? s.dict.connection.switchChain
+                    : pool.isPending
+                    ? s.dict.balance.withdrawing
+                    : s.dict.balance.withdraw}
+                </button>
+              </div>
+            ))}
           </>,
         )
       : null;

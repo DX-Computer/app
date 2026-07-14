@@ -14,9 +14,26 @@ export const CHAINS: ChainConfig[] = [
     explorerUrl: "https://anvil",
     nativeSymbol: "ETH",
   },
+  {
+    id: 260,
+    name: "zksync",
+    rpcUrl: process.env.NEXT_PUBLIC_ZKSYNC_RPC_URL || "http://127.0.0.1:8011",
+    explorerUrl: "",
+    nativeSymbol: "ETH",
+  },
+  {
+    id: 37111,
+    name: "lens-testnet",
+    rpcUrl:
+      process.env.NEXT_PUBLIC_LENS_TESTNET_RPC_URL ||
+      "https://rpc.testnet.lens.xyz",
+    explorerUrl: "https://explorer.testnet.lens.xyz",
+    nativeSymbol: "GRASS",
+  },
 ];
 
-export const ACTIVE_CHAIN: ChainConfig = CHAINS[0];
+export const ACTIVE_CHAIN: ChainConfig =
+  CHAINS.find((c) => c.name === process.env.NEXT_PUBLIC_CHAIN) || CHAINS[0];
 
 export const txUrl = (hash?: string): string =>
   hash && ACTIVE_CHAIN.explorerUrl

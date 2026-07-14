@@ -1,7 +1,13 @@
 import { toHex } from "viem";
 import type { Barretenberg } from "@aztec/bb.js";
 
-type CircuitName = "voting" | "signal" | "comment" | "edit" | "enrollment";
+type CircuitName =
+  | "voting"
+  | "signal"
+  | "comment"
+  | "edit"
+  | "enrollment"
+  | "identity_action";
 
 const cache: { [k: string]: { bytecode: string } } = {};
 
@@ -16,8 +22,10 @@ const getApi = (): Promise<Barretenberg> => {
 const loadCircuit = async (name: CircuitName) => {
   if (cache[name]) return cache[name];
   const res = await fetch(`/circuits/${name}.json`, { cache: "no-store" });
-  if (!res.ok)
-    throw new Error(`circuit ${name} not found at /circuits/${name}.json`);
+  if (!res.ok) {
+    console.log(`circuit ${name} not found at /circuits/${name}.json`);
+    throw new Error("circuitMissing");
+  }
   const json = await res.json();
   cache[name] = json;
   return json;
@@ -35,7 +43,7 @@ export const circuitAvailable = async (name: CircuitName): Promise<boolean> => {
 
 export const prove = async (
   name: CircuitName,
-  inputs: Record<string, unknown>
+  inputs: Record<string, unknown>,
 ): Promise<{ proof: `0x${string}`; publicInputs: string[] }> => {
   const circuit = await loadCircuit(name);
   const { Noir } = await import("@noir-lang/noir_js");

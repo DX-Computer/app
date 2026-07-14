@@ -16,7 +16,7 @@ const useIdentity = (commitment?: string) => {
   const { data: enrolled, refetch } = useReadContract({
     ...base,
     chainId: ACTIVE_CHAIN.id,
-    functionName: "hasEnrolled",
+    functionName: "enrolledCommitment",
     args: valid ? [BigInt(commitment as Hash)] : undefined,
     query: { enabled: Boolean(ready && valid) },
   });
@@ -36,8 +36,10 @@ const useIdentity = (commitment?: string) => {
 
   const enroll = async (
     proof: string,
+    freshBind: string,
+    enrollNullifier: string,
     commitmentArg: string,
-    enrollNullifier: string
+    siblings: string[],
   ) => {
     if (!ready || !address) {
       console.log("identityRegistry address not configured");
@@ -47,7 +49,13 @@ const useIdentity = (commitment?: string) => {
       {
         ...base,
         functionName: "enroll",
-        args: [proof as Hash, BigInt(commitmentArg as Hash), enrollNullifier as Hash],
+        args: [
+          proof as Hash,
+          freshBind as Hash,
+          enrollNullifier as Hash,
+          BigInt(commitmentArg as Hash),
+          siblings as Hash[],
+        ],
         ...paymasterFields(),
       } as never,
       { anon: true },

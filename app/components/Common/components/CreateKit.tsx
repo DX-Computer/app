@@ -24,6 +24,7 @@ const CreateKit: FunctionComponent<CreateKitProps> = ({
   parents,
   rungs,
   initial,
+  editing,
 }): JSX.Element => {
   const s = useShell();
   const f = useCreateKit(onCreate, initial);
@@ -34,6 +35,7 @@ const CreateKit: FunctionComponent<CreateKitProps> = ({
   const [forkQuery, setForkQuery] = useState<string>("");
 
   useEffect(() => {
+    if (editing) return;
     const fork = params.get("fork");
     if (fork && fork !== f.parent) {
       f.setParent(fork);
@@ -192,6 +194,7 @@ const CreateKit: FunctionComponent<CreateKitProps> = ({
         />
       </div>
 
+      {!editing && (
       <div className="relative flex flex-col gap-1">
         <span className={tag}>{s.dict.createKit.forkFromOptional}</span>
         {f.parent ? (
@@ -244,6 +247,7 @@ const CreateKit: FunctionComponent<CreateKitProps> = ({
           </>
         )}
       </div>
+      )}
 
       <div className="relative flex flex-row gap-2 items-center">
         <span className={tag}>{s.dict.common.license}</span>

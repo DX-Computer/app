@@ -104,7 +104,9 @@ const CreateCenter: FunctionComponent<{ versionOf?: string }> = ({
         await kit.publishKit(draft, uri);
         router.push(`/${s.lang}`);
       }
-    } catch {}
+    } catch (e) {
+      console.log("publish failed", e);
+    }
   };
 
   const anonMode =
@@ -141,6 +143,7 @@ const CreateCenter: FunctionComponent<{ versionOf?: string }> = ({
           labels={s.labels}
           rungs={s.rungs}
           initial={initial}
+          editing={Boolean(versionOf)}
         />
       </div>
 

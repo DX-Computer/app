@@ -1,12 +1,3 @@
-const SEMAPHORE_PROOF_COMPONENTS = [
-  { name: "merkleTreeDepth", type: "uint256" },
-  { name: "merkleTreeRoot", type: "uint256" },
-  { name: "nullifier", type: "uint256" },
-  { name: "message", type: "uint256" },
-  { name: "scope", type: "uint256" },
-  { name: "points", type: "uint256[8]" },
-] as const;
-
 export const CONTENT_REGISTRY_ABI = [
   {
     type: "function",
@@ -42,24 +33,12 @@ export const CONTENT_REGISTRY_ABI = [
   },
   {
     type: "function",
-    name: "semaphore",
-    stateMutability: "view",
-    inputs: [],
-    outputs: [{ type: "address" }],
-  },
-  {
-    type: "function",
-    name: "groupId",
-    stateMutability: "view",
-    inputs: [],
-    outputs: [{ type: "uint256" }],
-  },
-  {
-    type: "function",
     name: "post",
     stateMutability: "nonpayable",
     inputs: [
-      { name: "proof", type: "tuple", components: SEMAPHORE_PROOF_COMPONENTS },
+      { name: "proof", type: "bytes" },
+      { name: "merkleRoot", type: "bytes32" },
+      { name: "nullifier", type: "bytes32" },
       { name: "contentHash", type: "bytes32" },
       { name: "ownerTag", type: "bytes32" },
       { name: "canonicalTag", type: "bytes32" },
@@ -93,7 +72,10 @@ export const CONTENT_REGISTRY_ABI = [
     stateMutability: "nonpayable",
     inputs: [
       { name: "id", type: "uint256" },
-      { name: "proof", type: "bytes" },
+      { name: "ownerProof", type: "bytes" },
+      { name: "actionProof", type: "bytes" },
+      { name: "merkleRoot", type: "bytes32" },
+      { name: "nullifier", type: "bytes32" },
       { name: "newContentHash", type: "bytes32" },
       { name: "nonce", type: "uint64" },
     ],
@@ -105,7 +87,10 @@ export const CONTENT_REGISTRY_ABI = [
     stateMutability: "nonpayable",
     inputs: [
       { name: "id", type: "uint256" },
-      { name: "proof", type: "bytes" },
+      { name: "ownerProof", type: "bytes" },
+      { name: "actionProof", type: "bytes" },
+      { name: "merkleRoot", type: "bytes32" },
+      { name: "nullifier", type: "bytes32" },
     ],
     outputs: [],
   },
@@ -140,7 +125,7 @@ export const CONTENT_REGISTRY_ABI = [
       { name: "canonicalTag", type: "bytes32", indexed: false },
     ],
   },
-  { type: "error", name: "BadScope", inputs: [] },
+  { type: "error", name: "UnknownRoot", inputs: [] },
   { type: "error", name: "BadProof", inputs: [] },
   { type: "error", name: "NoContent", inputs: [] },
   { type: "error", name: "AlreadyRevoked", inputs: [] },

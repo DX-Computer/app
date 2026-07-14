@@ -1,10 +1,35 @@
 import { ADDRESSES } from "./addresses";
+import { defineChain } from "viem";
 import { foundry, zksyncInMemoryNode } from "viem/chains";
+import { chainConfig } from "viem/zksync";
 
 export const LOCALES =  ["en", "es", "ar", "pt", "fr"];
 
+export const LENS_TESTNET_RPC =
+  process.env.NEXT_PUBLIC_LENS_TESTNET_RPC_URL ||
+  "https://rpc.testnet.lens.xyz";
+
+export const lensTestnet = defineChain({
+  ...chainConfig,
+  id: 37111,
+  name: "Lens Testnet",
+  nativeCurrency: { name: "GRASS", symbol: "GRASS", decimals: 18 },
+  rpcUrls: { default: { http: [LENS_TESTNET_RPC] } },
+  blockExplorers: {
+    default: {
+      name: "Lens Explorer",
+      url: "https://explorer.testnet.lens.xyz",
+    },
+  },
+  testnet: true,
+});
+
 export const ACTIVE_CHAIN =
-  process.env.NEXT_PUBLIC_CHAIN === "zksync" ? zksyncInMemoryNode : foundry;
+  process.env.NEXT_PUBLIC_CHAIN === "lens-testnet"
+    ? lensTestnet
+    : process.env.NEXT_PUBLIC_CHAIN === "zksync"
+      ? zksyncInMemoryNode
+      : foundry;
 
 export const IPFS_GATEWAY = "https://cdn.digitalax.xyz";
 

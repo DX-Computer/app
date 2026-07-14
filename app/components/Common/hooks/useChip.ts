@@ -1,56 +1,61 @@
 "use client";
 
 import { useContext, useEffect, useState } from "react";
+import { usePublicClient } from "wagmi";
+import { numberToHex, type Hex } from "viem";
 import {
   connectChip,
   disconnectChip,
-  ensureChipReady,
-  ensureIdentity,
-  enrollNullifierFrom,
-  enrollProofInputs,
-  fetchAttestation,
-  freshnessFor,
   getIdentity,
-  ownerTagFor,
+  notifyIdentity,
   subscribeIdentity,
 } from "@/app/lib/zk/identity";
-import { circuitAvailable, prove } from "@/app/lib/zk/prover";
-import {
-  buildGroup,
-  generateScopedProof,
-  toContractProof,
-  PUBLISH_SCOPE,
-} from "@/app/lib/zk/identityTree";
-import { toHex32 } from "@/app/lib/zk/poseidon";
-import { ChipEnrollData, ChipPublishData } from "../types/common.types";
+import { circuitAvailable } from "@/app/lib/zk/prover";
+import { fetchDeviceSecret, forgetDeviceSecret } from "@/app/lib/zk/chipAction";
+import { chipEnrollProof } from "@/app/lib/zk/chipEnroll";
+import { buildIdentityTree } from "@/app/lib/zk/chipEnrollments";
+import { merklePath } from "@/app/lib/zk/chipTree";
+import { contractConfig } from "@/app/lib/contracts";
+import { ChipEnrollData } from "../types/common.types";
 import { ModalContext } from "@/app/providers";
 import useIdentity from "./useIdentity";
 
 type Hash = `0x${string}`;
 
+const COMMITMENT_KEY = "dx-chip-commitment";
+
+const storedCommitment = (): Hash | undefined => {
+  if (typeof window === "undefined") return undefined;
+  const v = window.localStorage.getItem(COMMITMENT_KEY);
+  return v && /^0x[0-9a-fA-F]{64}$/.test(v) ? (v as Hash) : undefined;
+};
+
+const randomFreshHex = (): string => {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+};
 
 const useChip = () => {
   const ctx = useContext(ModalContext);
-  useIdentity(
-    typeof getIdentity()?.commitment === "bigint"
-      ? toHex32(getIdentity()!.commitment)
-      : undefined,
+  const registry = contractConfig("identityRegistry");
+  const client = usePublicClient();
+  const [commitment, setCommitment] = useState<Hash | undefined>(
+    storedCommitment,
   );
+  useIdentity(commitment);
   const [connected, setConnected] = useState<boolean>(
     Boolean(getIdentity()),
   );
-  const [commitment, setCommitment] = useState<Hash | undefined>(() => {
-    const id = getIdentity();
-    return id ? toHex32(id.commitment) : undefined;
-  });
   const [busy, setBusy] = useState<boolean>(false);
 
   useEffect(
     () =>
       subscribeIdentity(() => {
-        const id = getIdentity();
-        setConnected(Boolean(id));
-        setCommitment(id ? toHex32(id.commitment) : undefined);
+        setConnected(Boolean(getIdentity()));
+        setCommitment(storedCommitment());
       }),
     [],
   );
@@ -58,14 +63,15 @@ const useChip = () => {
   const connect = async (): Promise<void> => {
     setBusy(true);
     try {
-      const id = await connectChip();
-      setCommitment(toHex32(id.commitment));
+      await fetchDeviceSecret();
+      await connectChip();
+      setCommitment(storedCommitment());
       setConnected(true);
     } catch (e) {
       console.log("chip.connect failed", e);
       ctx?.setTxStatus({
         phase: "error",
-        message: e instanceof Error ? e.message : "chip bridge not reachable",
+        message: e instanceof Error ? e.message : "bridgeUnreachable",
       });
       setConnected(false);
       setCommitment(undefined);
@@ -76,6 +82,7 @@ const useChip = () => {
 
   const disconnect = (): void => {
     disconnectChip();
+    forgetDeviceSecret();
     setConnected(false);
     setCommitment(undefined);
   };
@@ -83,82 +90,67 @@ const useChip = () => {
   const enrollData = async (): Promise<ChipEnrollData | null> => {
     setBusy(true);
     try {
-      const id = ensureIdentity();
       if (!(await circuitAvailable("enrollment"))) {
-        throw new Error(
-          "enrollment circuit missing at /circuits/enrollment.json",
-        );
+        throw new Error("circuitMissing");
       }
-      const freshHex = freshnessFor(id.commitment);
+      if (!registry.ready || !client) {
+        throw new Error("registryMissing");
+      }
       ctx?.setTxStatus({
         phase: "pending",
         message: "awaitingChip",
       });
-      const chipAttest = await fetchAttestation(freshHex);
-      ctx?.setTxStatus({
-        phase: "pending",
-        message: "provingAttestation",
-      });
-      const inputs = enrollProofInputs(chipAttest, freshHex);
-      const res = await prove("enrollment", inputs);
+      const res = await chipEnrollProof(
+        randomFreshHex(),
+        () =>
+          ctx?.setTxStatus({
+            phase: "pending",
+            message: "provingAttestation",
+          }),
+        async (c) => {
+          try {
+            return (await client.readContract({
+              address: registry.address as Hex,
+              abi: registry.abi,
+              functionName: "enrolledCommitment",
+              args: [c],
+            })) as boolean;
+          } catch {
+            return false;
+          }
+        },
+      );
+      const commitmentHex = numberToHex(res.commitment, { size: 32 }) as Hash;
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(COMMITMENT_KEY, commitmentHex);
+      }
+      setCommitment(commitmentHex);
+      notifyIdentity();
+      if (res.alreadyEnrolled) {
+        ctx?.setTxStatus({ phase: "success" });
+        return null;
+      }
+      const { tree, leaves } = await buildIdentityTree(
+        client,
+        registry.address as Hex,
+      );
+      const { siblings } = merklePath(tree, leaves.length);
       return {
-        commitment: toHex32(id.commitment),
+        commitment: commitmentHex,
         proof: res.proof,
-        enrollNullifier: toHex32(
-          enrollNullifierFrom(String(chipAttest.chipId)),
-        ),
+        enrollNullifier: res.enrollNullifier,
+        freshBind: res.freshBind,
+        siblings: siblings.map((s) => numberToHex(s, { size: 32 }) as Hash),
       };
     } catch (e) {
       console.log("chip.enrollData failed", e);
       ctx?.setTxStatus({
         phase: "error",
-        message: e instanceof Error ? e.message : "chip not connected",
+        message: e instanceof Error ? e.message : "chipNotConnected",
       });
       return null;
     } finally {
       setBusy(false);
-    }
-  };
-
-  const publishData = async (
-    designHash: Hash,
-  ): Promise<ChipPublishData | null> => {
-    try {
-      await ensureChipReady();
-      const sem = ensureIdentity();
-      const group = await buildGroup();
-      if (!group || !group.members.includes(sem.commitment)) {
-        ctx?.setTxStatus({
-          phase: "error",
-          message: "chipNotEnrolled",
-        });
-        return null;
-      }
-      ctx?.setTxStatus({ phase: "pending", message: "provingZk" });
-      const proof = await generateScopedProof(
-        sem,
-        group,
-        BigInt(designHash),
-        PUBLISH_SCOPE,
-      );
-      if (!proof) {
-        ctx?.setTxStatus({
-          phase: "error",
-          message: "chipNotEnrolled",
-        });
-        return null;
-      }
-      return {
-        semaphoreProof: toContractProof(proof),
-        ownerTag: toHex32(ownerTagFor(BigInt(designHash))),
-      };
-    } catch (e) {
-      console.log("chip.publishData failed", e);
-      ctx?.setTxStatus({
-        phase: "error",
-        message: e instanceof Error ? e.message : "chip not connected",
-      });
-      return null;
     }
   };
 
@@ -169,7 +161,6 @@ const useChip = () => {
     connect,
     disconnect,
     enrollData,
-    publishData,
   };
 };
 

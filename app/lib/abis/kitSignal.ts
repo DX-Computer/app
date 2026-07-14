@@ -1,56 +1,40 @@
-const SEMAPHORE_PROOF_COMPONENTS = [
-  { name: "merkleTreeDepth", type: "uint256" },
-  { name: "merkleTreeRoot", type: "uint256" },
-  { name: "nullifier", type: "uint256" },
-  { name: "message", type: "uint256" },
-  { name: "scope", type: "uint256" },
-  { name: "points", type: "uint256[8]" },
-] as const;
-
 export const KIT_SIGNAL_ABI = [
+  {
+    type: "function",
+    name: "SIGNAL_TAG",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "bytes4" }],
+  },
   {
     type: "function",
     name: "tally",
     stateMutability: "view",
     inputs: [
       { name: "kitId", type: "uint256" },
-      { name: "choice", type: "uint8" },
+      { name: "code", type: "uint8" },
     ],
     outputs: [{ type: "uint256" }],
   },
   {
     type: "function",
-    name: "semaphore",
+    name: "reactionChoice",
     stateMutability: "view",
-    inputs: [],
-    outputs: [{ type: "address" }],
+    inputs: [
+      { name: "kitId", type: "uint256" },
+      { name: "nullifier", type: "bytes32" },
+    ],
+    outputs: [{ type: "uint8" }],
   },
   {
     type: "function",
-    name: "groupId",
+    name: "reactionNonce",
     stateMutability: "view",
-    inputs: [],
+    inputs: [
+      { name: "kitId", type: "uint256" },
+      { name: "nullifier", type: "bytes32" },
+    ],
     outputs: [{ type: "uint256" }],
-  },
-  {
-    type: "function",
-    name: "signal",
-    stateMutability: "nonpayable",
-    inputs: [
-      { name: "proof", type: "tuple", components: SEMAPHORE_PROOF_COMPONENTS },
-      { name: "kitId", type: "uint256" },
-    ],
-    outputs: [],
-  },
-  {
-    type: "function",
-    name: "signalPublic",
-    stateMutability: "nonpayable",
-    inputs: [
-      { name: "kitId", type: "uint256" },
-      { name: "choice", type: "uint8" },
-    ],
-    outputs: [],
   },
   {
     type: "function",
@@ -64,13 +48,27 @@ export const KIT_SIGNAL_ABI = [
   },
   {
     type: "function",
-    name: "reactionChoice",
-    stateMutability: "view",
+    name: "signal",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "proof", type: "bytes" },
+      { name: "merkleRoot", type: "bytes32" },
+      { name: "kitId", type: "uint256" },
+      { name: "code", type: "uint8" },
+      { name: "nonce", type: "uint256" },
+      { name: "nullifier", type: "bytes32" },
+    ],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "signalPublic",
+    stateMutability: "nonpayable",
     inputs: [
       { name: "kitId", type: "uint256" },
-      { name: "nullifier", type: "uint256" },
+      { name: "code", type: "uint8" },
     ],
-    outputs: [{ type: "uint8" }],
+    outputs: [],
   },
   {
     type: "event",
@@ -78,7 +76,7 @@ export const KIT_SIGNAL_ABI = [
     inputs: [
       { name: "kitId", type: "uint256", indexed: true },
       { name: "choice", type: "uint8", indexed: false },
-      { name: "nullifier", type: "uint256", indexed: false },
+      { name: "nullifier", type: "bytes32", indexed: false },
     ],
   },
   {
@@ -90,9 +88,9 @@ export const KIT_SIGNAL_ABI = [
       { name: "signaler", type: "address", indexed: true },
     ],
   },
-  { type: "error", name: "BadScope", inputs: [] },
+  { type: "error", name: "UnknownRoot", inputs: [] },
+  { type: "error", name: "BadProof", inputs: [] },
   { type: "error", name: "BadNonce", inputs: [] },
   { type: "error", name: "StaleSignal", inputs: [] },
   { type: "error", name: "InvalidChoice", inputs: [] },
-  { type: "error", name: "BadProof", inputs: [] },
 ] as const;

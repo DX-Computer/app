@@ -11,7 +11,7 @@ import { WagmiProvider, createConfig, http } from "wagmi";
 import { ConnectKitProvider } from "connectkit";
 import { injected } from "@wagmi/connectors";
 import { foundry, zksyncInMemoryNode } from "viem/chains";
-import { ACTIVE_CHAIN } from "./lib/constants";
+import { ACTIVE_CHAIN, lensTestnet, LENS_TESTNET_RPC } from "./lib/constants";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { FullScreenVideo, TxStatus } from "./components/Common/types/common.types";
 import { mainnet, PublicClient } from "@lens-protocol/client";
@@ -49,6 +49,7 @@ const RPCS: Record<number, string> = {
   [foundry.id]: process.env.NEXT_PUBLIC_RPC_URL || "http://127.0.0.1:8545",
   [zksyncInMemoryNode.id]:
     process.env.NEXT_PUBLIC_ZKSYNC_RPC_URL || "http://127.0.0.1:8011",
+  [lensTestnet.id]: LENS_TESTNET_RPC,
 };
 
 export const config = createConfig({

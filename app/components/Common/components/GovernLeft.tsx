@@ -3,9 +3,11 @@
 import { FunctionComponent, JSX } from "react";
 import Link from "next/link";
 import { useReadContract } from "wagmi";
+import { formatUnits } from "viem";
 import Caja from "./Caja";
 import { useShell } from "./Shell";
 import { contractConfig } from "@/app/lib/contracts";
+import usePool from "../hooks/usePool";
 
 const tag = "relative flex text-[10px] text-gray-400";
 const body = "relative flex text-xs leading-relaxed";
@@ -25,11 +27,18 @@ const GovernLeft: FunctionComponent = (): JSX.Element => {
     functionName: "votingWindow",
     query: { enabled: council.ready },
   });
+  const pool = usePool();
   const quorum = typeof quorumRaw === "bigint" ? quorumRaw.toString() : "—";
   const windowMin =
     typeof windowRaw === "bigint"
       ? `${Math.round(Number(windowRaw) / 60)} min`
       : "—";
+  const bucketText = pool.ready
+    ? `${pool.activeBucket} (${formatUnits(
+        typeof pool.denomination === "bigint" ? pool.denomination : 0n,
+        18,
+      )} MONA)`
+    : "—";
 
   return (
     <>
@@ -69,6 +78,9 @@ const GovernLeft: FunctionComponent = (): JSX.Element => {
           </span>
           <span className="relative flex text-xs">
             {s.dict.govern.votingTime}: {windowMin}
+          </span>
+          <span className="relative flex text-xs">
+            {s.dict.govern.currentBucket}: {bucketText}
           </span>
         </div>
       </Caja>

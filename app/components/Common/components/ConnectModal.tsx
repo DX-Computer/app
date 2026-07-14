@@ -1,11 +1,10 @@
 "use client";
 
-import { CSSProperties, FunctionComponent, JSX, useState } from "react";
+import { CSSProperties, FunctionComponent, JSX } from "react";
 import { usePathname } from "next/navigation";
 import Marco from "./Marco";
 import useConnection from "../hooks/useConnection";
 import useChip from "../hooks/useChip";
-import { isStrictChip, setStrictChip } from "@/app/lib/zk/identity";
 import { LOCALES } from "@/app/lib/constants";
 import en from "@/app/dictionaries/en.json";
 import es from "@/app/dictionaries/es.json";
@@ -40,7 +39,6 @@ const ConnectModal: FunctionComponent<ConnectModalProps> = ({
 
   const conn = useConnection();
   const chip = useChip();
-  const [strict, setStrict] = useState<boolean>(isStrictChip());
 
   if (!open) return null;
 
@@ -124,35 +122,6 @@ const ConnectModal: FunctionComponent<ConnectModalProps> = ({
               chip.connected ? chip.disconnect : chip.connect,
               true,
             )}
-
-            <div className="relative flex flex-col gap-1">
-              <span className="relative flex flex-1 text-sm">
-                {d.secureTitle}
-              </span>
-              <div className="relative flex flex-row gap-2">
-                <button
-                  onClick={() => {
-                    setStrictChip(false);
-                    setStrict(false);
-                  }}
-                  className={`${actionBtn} ${strict ? "opacity-50" : ""}`}
-                >
-                  {d.secureSession}
-                </button>
-                <button
-                  onClick={() => {
-                    setStrictChip(true);
-                    setStrict(true);
-                  }}
-                  className={`${actionBtn} ${strict ? "" : "opacity-50"}`}
-                >
-                  {d.secureMax}
-                </button>
-              </div>
-              <span className="relative flex text-[10px] text-gray-400 leading-relaxed">
-                {strict ? d.secureMaxNote : d.secureSessionNote}
-              </span>
-            </div>
 
             <button onClick={onClose} className={`${ghostBtn} self-end`}>
               {w.done}

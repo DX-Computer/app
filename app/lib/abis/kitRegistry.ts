@@ -1,12 +1,3 @@
-const SEMAPHORE_PROOF_COMPONENTS = [
-  { name: "merkleTreeDepth", type: "uint256" },
-  { name: "merkleTreeRoot", type: "uint256" },
-  { name: "nullifier", type: "uint256" },
-  { name: "message", type: "uint256" },
-  { name: "scope", type: "uint256" },
-  { name: "points", type: "uint256[8]" },
-] as const;
-
 export const KIT_REGISTRY_ABI = [
   {
     type: "function",
@@ -135,7 +126,9 @@ export const KIT_REGISTRY_ABI = [
     name: "publish",
     stateMutability: "nonpayable",
     inputs: [
-      { name: "proof", type: "tuple", components: SEMAPHORE_PROOF_COMPONENTS },
+      { name: "proof", type: "bytes" },
+      { name: "merkleRoot", type: "bytes32" },
+      { name: "nullifier", type: "bytes32" },
       { name: "designHash", type: "bytes32" },
       { name: "ownerTag", type: "bytes32" },
       { name: "contentUri", type: "string" },
@@ -148,7 +141,9 @@ export const KIT_REGISTRY_ABI = [
     stateMutability: "nonpayable",
     inputs: [
       { name: "parentId", type: "uint256" },
-      { name: "proof", type: "tuple", components: SEMAPHORE_PROOF_COMPONENTS },
+      { name: "proof", type: "bytes" },
+      { name: "merkleRoot", type: "bytes32" },
+      { name: "nullifier", type: "bytes32" },
       { name: "designHash", type: "bytes32" },
       { name: "ownerTag", type: "bytes32" },
       { name: "contentUri", type: "string" },
@@ -161,7 +156,10 @@ export const KIT_REGISTRY_ABI = [
     stateMutability: "nonpayable",
     inputs: [
       { name: "id", type: "uint256" },
-      { name: "proof", type: "bytes" },
+      { name: "ownerProof", type: "bytes" },
+      { name: "actionProof", type: "bytes" },
+      { name: "merkleRoot", type: "bytes32" },
+      { name: "nullifier", type: "bytes32" },
       { name: "newDesignHash", type: "bytes32" },
       { name: "nonce", type: "uint64" },
       { name: "newContentUri", type: "string" },
@@ -174,7 +172,10 @@ export const KIT_REGISTRY_ABI = [
     stateMutability: "nonpayable",
     inputs: [
       { name: "id", type: "uint256" },
-      { name: "proof", type: "bytes" },
+      { name: "ownerProof", type: "bytes" },
+      { name: "actionProof", type: "bytes" },
+      { name: "merkleRoot", type: "bytes32" },
+      { name: "nullifier", type: "bytes32" },
       { name: "nonce", type: "uint64" },
     ],
     outputs: [],
@@ -185,7 +186,10 @@ export const KIT_REGISTRY_ABI = [
     stateMutability: "nonpayable",
     inputs: [
       { name: "id", type: "uint256" },
-      { name: "proof", type: "bytes" },
+      { name: "ownerProof", type: "bytes" },
+      { name: "actionProof", type: "bytes" },
+      { name: "merkleRoot", type: "bytes32" },
+      { name: "nullifier", type: "bytes32" },
       { name: "newOwnerTag", type: "bytes32" },
       { name: "nonce", type: "uint64" },
     ],
@@ -198,7 +202,10 @@ export const KIT_REGISTRY_ABI = [
     inputs: [
       { name: "id", type: "uint256" },
       { name: "to", type: "address" },
-      { name: "proof", type: "bytes" },
+      { name: "ownerProof", type: "bytes" },
+      { name: "actionProof", type: "bytes" },
+      { name: "merkleRoot", type: "bytes32" },
+      { name: "nullifier", type: "bytes32" },
       { name: "nonce", type: "uint64" },
     ],
     outputs: [],

@@ -1,25 +1,37 @@
 import { useContext } from "react";
-import { useAccount, useReadContract } from "wagmi";
+import { useAccount, usePublicClient, useReadContract } from "wagmi";
+import {
+  encodeAbiParameters,
+  keccak256,
+  sliceHex,
+  stringToHex,
+  type Hex,
+} from "viem";
 import { contractConfig } from "@/app/lib/contracts";
 import { ModalContext } from "@/app/providers";
-import { ensureChipReady, ensureIdentity, getIdentity } from "@/app/lib/zk/identity";
-import { buildGroup, generateScopedProof, toContractProof, semaphoreNullifier } from "@/app/lib/zk/identityTree";
+import { ACTIVE_CHAIN } from "@/app/lib/constants";
+import {
+  chipActionProof,
+  nullifierHex,
+  peekDeviceSecret,
+  scopeOf,
+} from "@/app/lib/zk/chipAction";
+import { buildIdentityTree } from "@/app/lib/zk/chipEnrollments";
 import { paymasterFields } from "@/app/lib/zk/paymaster";
 import { useTrackedWrite } from "./useTrackedWrite";
-import useChip from "./useChip";
-import useIdentity from "./useIdentity";
-import useWalkthrough from "./useWalkthrough";
 
 type Hash = `0x${string}`;
 
+const SIGNAL_TAG = sliceHex(keccak256(stringToHex("kitSignal.signal")), 0, 4);
+
 const useKitSignal = (kitId?: bigint) => {
   const { address, abi, ready } = contractConfig("kitSignal");
+  const registry = contractConfig("identityRegistry");
   const base = { address: address as Hash, abi } as const;
+  const client = usePublicClient();
   const { writeContractAsync, isPending, error } = useTrackedWrite();
   const ctx = useContext(ModalContext);
-  const signer = useChip();
-  const id = useIdentity(signer.commitment);
-  const { openWalkthrough } = useWalkthrough();
+  const { address: account } = useAccount();
 
   const { data: plusRaw, refetch: refetchPlus } = useReadContract({
     ...base,
@@ -33,8 +45,6 @@ const useKitSignal = (kitId?: bigint) => {
     args: kitId !== undefined ? [kitId, 0] : undefined,
     query: { enabled: ready && kitId !== undefined },
   });
-
-  const { address: account } = useAccount();
   const { data: publicChoiceRaw, refetch: refetchPublic } = useReadContract({
     ...base,
     functionName: "publicChoice",
@@ -46,21 +56,16 @@ const useKitSignal = (kitId?: bigint) => {
       ? ((publicChoiceRaw - 1) as 0 | 1)
       : -1;
 
-  const anonId = getIdentity();
+  const seed = peekDeviceSecret();
   const myNullifier =
-    anonId && kitId !== undefined
-      ? semaphoreNullifier(kitId, anonId.secretScalar)
+    seed && kitId !== undefined && address
+      ? nullifierHex(seed, scopeOf(address as Hex, SIGNAL_TAG, kitId))
       : undefined;
   const { data: anonChoiceRaw, refetch: refetchAnon } = useReadContract({
     ...base,
     functionName: "reactionChoice",
-    args:
-      kitId !== undefined && myNullifier !== undefined
-        ? [kitId, myNullifier]
-        : undefined,
-    query: {
-      enabled: ready && kitId !== undefined && myNullifier !== undefined,
-    },
+    args: kitId !== undefined && myNullifier ? [kitId, myNullifier] : undefined,
+    query: { enabled: ready && kitId !== undefined && Boolean(myNullifier) },
   });
   const myAnonChoice =
     typeof anonChoiceRaw === "number" && anonChoiceRaw > 0
@@ -71,11 +76,6 @@ const useKitSignal = (kitId?: bigint) => {
   const minus = typeof minusRaw === "bigint" ? Number(minusRaw) : 0;
 
   const canSignal = ready && kitId !== undefined;
-  const note = !ready
-    ? "set NEXT_PUBLIC_KIT_SIGNAL"
-    : kitId === undefined
-    ? "open a published kit"
-    : "anonymous · proven from your identity";
 
   const send = async (
     code: 0 | 1 | 2,
@@ -96,30 +96,38 @@ const useKitSignal = (kitId?: bigint) => {
       refetchMinus();
       return hash;
     }
-    if (!id.enrolled) {
-      openWalkthrough();
-      return;
-    }
-    await ensureChipReady();
-    const identity = ensureIdentity();
-    const group = await buildGroup();
-    if (!group) {
-      openWalkthrough();
+    if (!registry.ready || !client) {
+      console.log("identityRegistry not configured");
       return;
     }
     ctx?.setTxStatus({ phase: "pending", message: "provingZk" });
-    const message = BigInt(code) + (BigInt(Date.now()) << 2n);
-    const proof = await generateScopedProof(identity, group, message, kitId);
-    if (!proof) {
-      openWalkthrough();
-      return;
-    }
+    const { tree, leaves } = await buildIdentityTree(
+      client,
+      registry.address as Hex,
+    );
+    const nonce = BigInt(Date.now());
+    const payloadHash = keccak256(
+      encodeAbiParameters(
+        [{ type: "uint8" }, { type: "uint256" }],
+        [code, nonce],
+      ),
+    );
+    const res = await chipActionProof({
+      contract: address as Hex,
+      chainId: ACTIVE_CHAIN.id,
+      actionTag: SIGNAL_TAG,
+      scopeSeed: kitId,
+      payloadHash,
+      label: `signal:kit${kitId}`,
+      tree,
+      leaves,
+    });
 
     const hash = await writeContractAsync(
       {
         ...base,
         functionName: "signal",
-        args: [toContractProof(proof), kitId],
+        args: [res.proof, res.merkleRoot, kitId, code, nonce, res.nullifier],
         ...paymasterFields(),
       } as never,
       { anon: true },
@@ -130,8 +138,10 @@ const useKitSignal = (kitId?: bigint) => {
     return hash;
   };
 
-  const signal = (choice: 0 | 1, mode: "anonymous" | "public" = "anonymous") =>
-    send(choice, mode);
+  const signal = (choice: 0 | 1, mode: "anonymous" | "public" = "anonymous") => {
+    const current = mode === "public" ? myPublicChoice : myAnonChoice;
+    return send(current === choice ? 2 : choice, mode);
+  };
   const retract = (mode: "anonymous" | "public" = "anonymous") =>
     send(2, mode);
 
@@ -141,7 +151,6 @@ const useKitSignal = (kitId?: bigint) => {
     canSignal,
     myPublicChoice,
     myAnonChoice,
-    note,
     signal,
     retract,
     isPending,

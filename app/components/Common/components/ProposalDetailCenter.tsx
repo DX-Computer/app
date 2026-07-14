@@ -3,10 +3,9 @@
 import { FunctionComponent, JSX, useState } from "react";
 import { usePublicClient, useReadContract } from "wagmi";
 import { useQuery } from "@tanstack/react-query";
-import { parseAbiItem } from "viem";
+import { keccak256, parseAbiItem, sliceHex, stringToHex } from "viem";
 import { contractConfig } from "@/app/lib/contracts";
-import { getIdentity } from "@/app/lib/zk/identity";
-import { councilScope, semaphoreNullifier } from "@/app/lib/zk/identityTree";
+import { nullifierOf, scopeOf, seedField } from "@/app/lib/zk/chipAction";
 import { countdown } from "@/app/lib/countdown";
 import useChainClock from "../hooks/useChainClock";
 import Caja from "./Caja";
@@ -95,16 +94,17 @@ const ProposalDetailCenter: FunctionComponent<{ id: string }> = ({
   const { data: myVote, refetch: refetchVote } = useQuery({
     queryKey: ["my-vote", id, signer.commitment],
     queryFn: async (): Promise<number> => {
-      const identity = getIdentity();
-      if (!identity || !publicClient || !council.ready) return -1;
-      const mine = semaphoreNullifier(
-        councilScope(council.address as `0x${string}`, BigInt(id)),
-        identity.secretScalar,
+      const seed = await seedField().catch(() => null);
+      if (!seed || !publicClient || !council.ready) return -1;
+      const voteTag = sliceHex(keccak256(stringToHex("dxCouncil.vote")), 0, 4);
+      const mine = nullifierOf(
+        seed,
+        scopeOf(council.address as `0x${string}`, voteTag, BigInt(id)),
       );
       const logs = await publicClient.getLogs({
         address: council.address as `0x${string}`,
         event: parseAbiItem(
-          "event Voted(uint256 indexed id, uint8 choice, uint256 nullifier)",
+          "event Voted(uint256 indexed id, uint8 choice, bytes32 nullifier)",
         ),
         args: { id: BigInt(id) },
         fromBlock: 0n,
@@ -161,7 +161,9 @@ const ProposalDetailCenter: FunctionComponent<{ id: string }> = ({
       refetchVote();
       refetchYes();
       refetchNo();
-    } catch {}
+    } catch (e) {
+      console.log("vote failed", e);
+    }
   };
 
   const execAnon = execMode === "anonymous" && anonReady();
@@ -186,7 +188,9 @@ const ProposalDetailCenter: FunctionComponent<{ id: string }> = ({
     try {
       await c.execute(BigInt(p.id), execAnon);
       refetch();
-    } catch {} finally {
+    } catch (e) {
+      console.log("execute failed", e);
+    } finally {
       setExecBusy(false);
     }
   };
@@ -278,7 +282,7 @@ const ProposalDetailCenter: FunctionComponent<{ id: string }> = ({
             </div>
           </Caja>
 
-          {open && voted && (
+          {voted && (
             <Caja bg="bg" className="flex-col gap-2 p-3">
               <span className="relative flex text-xs text-green-400">
                 ✓{" "}

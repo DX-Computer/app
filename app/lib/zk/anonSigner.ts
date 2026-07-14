@@ -14,6 +14,9 @@ const DEV_FAUCETS: Record<number, `0x${string}` | undefined> = {
 const RPC_URLS: Record<number, string | undefined> = {
   31337: process.env.NEXT_PUBLIC_RPC_URL,
   260: process.env.NEXT_PUBLIC_ZKSYNC_RPC_URL,
+  37111:
+    process.env.NEXT_PUBLIC_LENS_TESTNET_RPC_URL ||
+    "https://rpc.testnet.lens.xyz",
 };
 
 const transportFor = (chainId: number) => http(RPC_URLS[chainId]);

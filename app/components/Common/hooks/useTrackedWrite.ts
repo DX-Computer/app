@@ -42,7 +42,7 @@ export const useTrackedWrite = () => {
           ? current
           : {
               phase: "error",
-              message: e instanceof Error ? e.message : "unknown error",
+              message: e instanceof Error ? e.message : "unknownError",
             }
       );
       throw e;

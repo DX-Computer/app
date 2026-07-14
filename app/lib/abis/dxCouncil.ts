@@ -1,12 +1,3 @@
-const SEMAPHORE_PROOF_COMPONENTS = [
-  { name: "merkleTreeDepth", type: "uint256" },
-  { name: "merkleTreeRoot", type: "uint256" },
-  { name: "nullifier", type: "uint256" },
-  { name: "message", type: "uint256" },
-  { name: "scope", type: "uint256" },
-  { name: "points", type: "uint256[8]" },
-] as const;
-
 export const DX_COUNCIL_ABI = [
   {
     type: "function",
@@ -21,7 +12,7 @@ export const DX_COUNCIL_ABI = [
     stateMutability: "view",
     inputs: [{ name: "id", type: "uint256" }],
     outputs: [
-      { name: "identityRoot", type: "uint256" },
+      { name: "identityRoot", type: "bytes32" },
       { name: "poolRoot", type: "bytes32" },
       { name: "bucket", type: "uint8" },
       { name: "start", type: "uint64" },
@@ -63,6 +54,9 @@ export const DX_COUNCIL_ABI = [
     name: "proposeBan",
     stateMutability: "nonpayable",
     inputs: [
+      { name: "proof", type: "bytes" },
+      { name: "merkleRoot", type: "bytes32" },
+      { name: "nullifier", type: "bytes32" },
       { name: "wallet", type: "address" },
       { name: "banned", type: "bool" },
       { name: "contentUri", type: "string" },
@@ -74,6 +68,9 @@ export const DX_COUNCIL_ABI = [
     name: "proposeQuorum",
     stateMutability: "nonpayable",
     inputs: [
+      { name: "proof", type: "bytes" },
+      { name: "merkleRoot", type: "bytes32" },
+      { name: "nullifier", type: "bytes32" },
       { name: "newQuorum", type: "uint256" },
       { name: "contentUri", type: "string" },
     ],
@@ -84,6 +81,9 @@ export const DX_COUNCIL_ABI = [
     name: "proposeWindow",
     stateMutability: "nonpayable",
     inputs: [
+      { name: "proof", type: "bytes" },
+      { name: "merkleRoot", type: "bytes32" },
+      { name: "nullifier", type: "bytes32" },
       { name: "newWindow", type: "uint256" },
       { name: "contentUri", type: "string" },
     ],
@@ -94,6 +94,9 @@ export const DX_COUNCIL_ABI = [
     name: "proposeBucket",
     stateMutability: "nonpayable",
     inputs: [
+      { name: "proof", type: "bytes" },
+      { name: "merkleRoot", type: "bytes32" },
+      { name: "nullifier", type: "bytes32" },
       { name: "newBucket", type: "uint8" },
       { name: "contentUri", type: "string" },
     ],
@@ -111,10 +114,12 @@ export const DX_COUNCIL_ABI = [
     name: "vote",
     stateMutability: "nonpayable",
     inputs: [
-      { name: "voteProof", type: "tuple", components: SEMAPHORE_PROOF_COMPONENTS },
+      { name: "voteProof", type: "bytes" },
       { name: "poolZkProof", type: "bytes" },
       { name: "poolRoot", type: "bytes32" },
       { name: "proposalId", type: "uint256" },
+      { name: "choice", type: "uint8" },
+      { name: "nullifier", type: "bytes32" },
     ],
     outputs: [],
   },
@@ -144,7 +149,7 @@ export const DX_COUNCIL_ABI = [
     inputs: [
       { name: "id", type: "uint256", indexed: true },
       { name: "choice", type: "uint8", indexed: false },
-      { name: "nullifier", type: "uint256", indexed: false },
+      { name: "nullifier", type: "bytes32", indexed: false },
     ],
   },
   {
@@ -162,8 +167,9 @@ export const DX_COUNCIL_ABI = [
   { type: "error", name: "InvalidChoice", inputs: [] },
   { type: "error", name: "AlreadyExecuted", inputs: [] },
   { type: "error", name: "Rejected", inputs: [] },
+  { type: "error", name: "AlreadyVoted", inputs: [] },
   { type: "error", name: "BadProof", inputs: [] },
-  { type: "error", name: "BadScope", inputs: [] },
+  { type: "error", name: "UnknownRoot", inputs: [] },
   { type: "error", name: "StaleRoot", inputs: [] },
   { type: "error", name: "BelowFloor", inputs: [] },
   { type: "error", name: "BadWindow", inputs: [] },

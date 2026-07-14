@@ -54,7 +54,13 @@ const Walkthrough: FunctionComponent<WalkthroughProps> = ({
     try {
       const d = await chip.enrollData();
       if (!d) return;
-      await id.enroll(d.proof, d.commitment, d.enrollNullifier);
+      await id.enroll(
+        d.proof,
+        d.freshBind,
+        d.enrollNullifier,
+        d.commitment,
+        d.siblings,
+      );
       id.refetch();
     } catch {}
   };
@@ -140,7 +146,7 @@ const Walkthrough: FunctionComponent<WalkthroughProps> = ({
                       <span className="relative flex text-[10px] text-green-400">
                         ✓ {w.enrolled}
                       </span>
-                    ) : id.enrolledKnown ? (
+                    ) : id.enrolledKnown || !chip.commitment ? (
                       <div className="relative flex flex-col gap-2">
                         <span className="relative flex text-[10px] text-gray-300">
                           {w.notEnrolled}

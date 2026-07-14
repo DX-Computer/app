@@ -1,15 +1,32 @@
 import { useContext } from "react";
-import { useAccount, useReadContract } from "wagmi";
-import { keccak256, stringToHex, toHex } from "viem";
+import { useAccount, usePublicClient, useReadContract } from "wagmi";
+import {
+  encodeAbiParameters,
+  keccak256,
+  sliceHex,
+  stringToHex,
+  toHex,
+  type Hex,
+} from "viem";
 import { contractConfig } from "@/app/lib/contracts";
+import { ACTIVE_CHAIN } from "@/app/lib/constants";
 import { ModalContext } from "@/app/providers";
 import { KitDraft } from "../types/common.types";
 import { useTrackedWrite } from "./useTrackedWrite";
-import useChip from "./useChip";
-import { SNARK_FIELD, editProofInputs, ensureChipReady } from "@/app/lib/zk/identity";
+import {
+  SNARK_FIELD,
+  editProofInputs,
+  ownerTagFor,
+} from "@/app/lib/zk/identity";
 import { circuitAvailable, prove } from "@/app/lib/zk/prover";
+import { chipActionProof } from "@/app/lib/zk/chipAction";
+import { buildIdentityTree } from "@/app/lib/zk/chipEnrollments";
+import { toHex32 } from "@/app/lib/zk/poseidon";
 
 type Hash = `0x${string}`;
+
+const PUBLISH_TAG = sliceHex(keccak256(stringToHex("kitRegistry.publish")), 0, 4);
+const KIT_EDIT_TAG = sliceHex(keccak256(stringToHex("kitRegistry.edit")), 0, 4);
 
 const ZERO32 =
   "0x0000000000000000000000000000000000000000000000000000000000000000" as Hash;
@@ -49,7 +66,6 @@ const editProof = async (
   if (!anchor || !ownerTag) return "0x";
   if (!(await circuitAvailable("edit"))) return "0x";
   try {
-    await ensureChipReady();
     const inputs = editProofInputs(anchor, ownerTag, newContentHash, nonce);
     onProving?.();
     const { proof } = await prove("edit", inputs);
@@ -66,9 +82,10 @@ const useKitRegistry = () => {
     ctx?.setTxStatus({ phase: "pending", message: "provingZk" });
   const { address: account } = useAccount();
   const { address, abi, ready } = contractConfig("kitRegistry");
+  const registry = contractConfig("identityRegistry");
   const base = { address: address as Hash, abi } as const;
+  const client = usePublicClient();
   const { writeContractAsync, isPending, error } = useTrackedWrite();
-  const chip = useChip();
 
   const { data: kitCount, refetch: refetchCount } = useReadContract({
     ...base,
@@ -135,21 +152,50 @@ const useKitRegistry = () => {
     if (!guard()) return;
     const designHash = designHashFromDraft(draft);
     if (draft.mode === "anonymous") {
-      const data = await chip.publishData(designHash);
-      if (!data) {
-        console.log("anonymous publish: no chip publish data");
+      if (!registry.ready || !client) {
+        console.log("identityRegistry not configured");
         return;
       }
-      if (draft.parent) {
+      const ownerTag = toHex32(ownerTagFor(BigInt(designHash)));
+      proving();
+      const { tree, leaves } = await buildIdentityTree(
+        client,
+        registry.address as Hex,
+      );
+      const parentId = draft.parent ? BigInt(draft.parent) : 0n;
+      const payloadHash = keccak256(
+        encodeAbiParameters(
+          [
+            { type: "bytes32" },
+            { type: "bytes32" },
+            { type: "bytes32" },
+            { type: "uint256" },
+          ],
+          [designHash, ownerTag, keccak256(stringToHex(contentUri)), parentId],
+        ),
+      );
+      const res = await chipActionProof({
+        contract: address as Hex,
+        chainId: ACTIVE_CHAIN.id,
+        actionTag: PUBLISH_TAG,
+        scopeSeed: 0n,
+        payloadHash,
+        label: "publish",
+        tree,
+        leaves,
+      });
+      if (parentId) {
         return writeContractAsync(
           {
             ...base,
             functionName: "fork",
             args: [
-              BigInt(draft.parent),
-              data.semaphoreProof,
+              parentId,
+              res.proof,
+              res.merkleRoot,
+              res.nullifier,
               designHash,
-              data.ownerTag,
+              ownerTag,
               contentUri,
             ],
           },
@@ -160,7 +206,14 @@ const useKitRegistry = () => {
         {
           ...base,
           functionName: "publish",
-          args: [data.semaphoreProof, designHash, data.ownerTag, contentUri],
+          args: [
+            res.proof,
+            res.merkleRoot,
+            res.nullifier,
+            designHash,
+            ownerTag,
+            contentUri,
+          ],
         },
         { anon: true },
       );
@@ -169,6 +222,50 @@ const useKitRegistry = () => {
       return forkPublic(BigInt(draft.parent), designHash, contentUri);
     }
     return publishPublic(designHash, contentUri);
+  };
+
+  const chipEdit = async (payloadHash: Hash, label: string) => {
+    if (!registry.ready || !client) {
+      throw new Error("registryMissing");
+    }
+    const { tree, leaves } = await buildIdentityTree(
+      client,
+      registry.address as Hex,
+    );
+    return chipActionProof({
+      contract: address as Hex,
+      chainId: ACTIVE_CHAIN.id,
+      actionTag: KIT_EDIT_TAG,
+      scopeSeed: BigInt(payloadHash),
+      payloadHash,
+      label,
+      tree,
+      leaves,
+    });
+  };
+
+  const editFail = (e: unknown) => {
+    console.log("kit edit proof failed", e);
+    ctx?.setTxStatus({
+      phase: "error",
+      message: e instanceof Error ? e.message : "actFailed",
+    });
+  };
+
+  const chainVersion = async (
+    id: string,
+    fallback?: string,
+  ): Promise<string> => {
+    try {
+      const k = (await client!.readContract({
+        ...base,
+        functionName: "kits",
+        args: [BigInt(id)],
+      })) as readonly unknown[];
+      return (k[4] as bigint).toString();
+    } catch {
+      return fallback || "0";
+    }
   };
 
   const pushVersionKit = async (
@@ -183,22 +280,54 @@ const useKitRegistry = () => {
     if (!guard()) return;
     if (mode === "anonymous") {
       const newDesignHash = designHashFromDraft(draft);
-      const nonce = version || "0";
-      const proof = await editProof(
-        anchor,
-        ownerTag,
-        newDesignHash,
-        nonce,
-        proving,
-      );
-      return writeContractAsync(
-        {
-          ...base,
-          functionName: "pushVersion",
-          args: [BigInt(id), proof, newDesignHash, BigInt(nonce), contentUri],
-        },
-        { anon: true },
-      );
+      const nonce = await chainVersion(id, version);
+      let action;
+      try {
+        const proof = await editProof(
+          anchor,
+          ownerTag,
+          newDesignHash,
+          nonce,
+          proving,
+        );
+        const payloadHash = keccak256(
+          encodeAbiParameters(
+            [
+              { type: "uint256" },
+              { type: "bytes32" },
+              { type: "uint64" },
+              { type: "bytes32" },
+            ],
+            [
+              BigInt(id),
+              newDesignHash,
+              BigInt(nonce),
+              keccak256(stringToHex(contentUri)),
+            ],
+          ),
+        );
+        action = await chipEdit(payloadHash, "edit");
+        return await writeContractAsync(
+          {
+            ...base,
+            functionName: "pushVersion",
+            args: [
+              BigInt(id),
+              proof,
+              action.proof,
+              action.merkleRoot,
+              action.nullifier,
+              newDesignHash,
+              BigInt(nonce),
+              contentUri,
+            ],
+          },
+          { anon: true },
+        );
+      } catch (e) {
+        editFail(e);
+        return;
+      }
     }
     return pushVersionPublic(BigInt(id), designHashFromDraft(draft), contentUri);
   };
@@ -213,16 +342,35 @@ const useKitRegistry = () => {
   ) => {
     if (!guard()) return;
     if (mode === "anonymous") {
-      const nonce = version || "0";
-      const proof = await editProof(anchor, ownerTag, ZERO32, nonce, proving);
-      return writeContractAsync(
-        {
-          ...base,
-          functionName: "remove",
-          args: [BigInt(id), proof, BigInt(nonce)],
-        },
-        { successNote: note, anon: true },
-      );
+      const nonce = await chainVersion(id, version);
+      try {
+        const proof = await editProof(anchor, ownerTag, ZERO32, nonce, proving);
+        const payloadHash = keccak256(
+          encodeAbiParameters(
+            [{ type: "uint256" }, { type: "uint64" }],
+            [BigInt(id), BigInt(nonce)],
+          ),
+        );
+        const action = await chipEdit(payloadHash, "edit");
+        return await writeContractAsync(
+          {
+            ...base,
+            functionName: "remove",
+            args: [
+              BigInt(id),
+              proof,
+              action.proof,
+              action.merkleRoot,
+              action.nullifier,
+              BigInt(nonce),
+            ],
+          },
+          { successNote: note, anon: true },
+        );
+      } catch (e) {
+        editFail(e);
+        return;
+      }
     }
     return removePublic(BigInt(id), note);
   };
@@ -244,16 +392,36 @@ const useKitRegistry = () => {
     ownerTag?: string,
   ) => {
     if (!guard()) return;
-    const nonce = version || "0";
-    const proof = await editProof(anchor, ownerTag, to as Hash, nonce, proving);
-    return writeContractAsync(
-      {
-        ...base,
-        functionName: "claim",
-        args: [BigInt(id), to as Hash, proof, BigInt(nonce)],
-      },
-      { anon: true },
-    );
+    const nonce = await chainVersion(id, version);
+    try {
+      const proof = await editProof(anchor, ownerTag, to as Hash, nonce, proving);
+      const payloadHash = keccak256(
+        encodeAbiParameters(
+          [{ type: "uint256" }, { type: "address" }, { type: "uint64" }],
+          [BigInt(id), to as Hash, BigInt(nonce)],
+        ),
+      );
+      const action = await chipEdit(payloadHash, "edit");
+      return await writeContractAsync(
+        {
+          ...base,
+          functionName: "claim",
+          args: [
+            BigInt(id),
+            to as Hash,
+            proof,
+            action.proof,
+            action.merkleRoot,
+            action.nullifier,
+            BigInt(nonce),
+          ],
+        },
+        { anon: true },
+      );
+    } catch (e) {
+      editFail(e);
+      return;
+    }
   };
 
   const retagKit = async (
@@ -264,22 +432,42 @@ const useKitRegistry = () => {
     ownerTag?: string,
   ) => {
     if (!guard()) return;
-    const nonce = version || "0";
-    const proof = await editProof(
-      anchor,
-      ownerTag,
-      newOwnerTag as Hash,
-      nonce,
-      proving,
-    );
-    return writeContractAsync(
-      {
-        ...base,
-        functionName: "retag",
-        args: [BigInt(id), proof, newOwnerTag as Hash, BigInt(nonce)],
-      },
-      { anon: true },
-    );
+    const nonce = await chainVersion(id, version);
+    try {
+      const proof = await editProof(
+        anchor,
+        ownerTag,
+        newOwnerTag as Hash,
+        nonce,
+        proving,
+      );
+      const payloadHash = keccak256(
+        encodeAbiParameters(
+          [{ type: "uint256" }, { type: "bytes32" }, { type: "uint64" }],
+          [BigInt(id), newOwnerTag as Hash, BigInt(nonce)],
+        ),
+      );
+      const action = await chipEdit(payloadHash, "edit");
+      return await writeContractAsync(
+        {
+          ...base,
+          functionName: "retag",
+          args: [
+            BigInt(id),
+            proof,
+            action.proof,
+            action.merkleRoot,
+            action.nullifier,
+            newOwnerTag as Hash,
+            BigInt(nonce),
+          ],
+        },
+        { anon: true },
+      );
+    } catch (e) {
+      editFail(e);
+      return;
+    }
   };
 
   return {

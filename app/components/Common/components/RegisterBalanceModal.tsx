@@ -62,7 +62,7 @@ const RegisterBalanceModal: FunctionComponent<Props> = ({
 
   useEffect(() => {
     if (!open || !chip.connected || !idn.enrolled) return;
-    pool.hasDeposit().then(setDeposited);
+    pool.hasDeposit("active").then(setDeposited);
   }, [open, chip.connected, idn.enrolled, pool.activeBucket]);
 
   if (!open) return null;

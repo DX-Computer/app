@@ -1,11 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
 import { useAccount, usePublicClient } from "wagmi";
-import { formatUnits, parseAbiItem } from "viem";
+import { formatUnits, keccak256, parseAbiItem, sliceHex, stringToHex } from "viem";
 import { subgraphQuery, subgraphReady } from "@/app/lib/graphql/fetcher";
 import { DASHBOARD_QUERY, ANON_OWNED_QUERY } from "@/app/lib/graphql/queries";
 import { contractConfig } from "@/app/lib/contracts";
 import { getIdentity, matchesOwnerTag } from "@/app/lib/zk/identity";
-import { semaphoreNullifier } from "@/app/lib/zk/identityTree";
+import { nullifierOf, peekSeedField, scopeOf } from "@/app/lib/zk/chipAction";
 import { commentTag } from "@/app/lib/commentTag";
 import resolveUri from "./resolveUri";
 import {
@@ -16,21 +16,24 @@ import {
 type Hash = `0x${string}`;
 
 const SIGNALED_EVENT = parseAbiItem(
-  "event Signaled(uint256 indexed kitId, uint8 choice, uint256 nullifier)",
+  "event Signaled(uint256 indexed kitId, uint8 choice, bytes32 nullifier)",
 );
 const SIGNALED_PUBLIC_EVENT = parseAbiItem(
   "event SignaledPublic(uint256 indexed kitId, uint8 choice, address indexed signaler)",
 );
 const VOTED_EVENT = parseAbiItem(
-  "event Voted(uint256 indexed id, uint8 choice, uint256 nullifier)",
+  "event Voted(uint256 indexed id, uint8 choice, bytes32 nullifier)",
 );
+
+const SIGNAL_TAG = sliceHex(keccak256(stringToHex("kitSignal.signal")), 0, 4);
+const VOTE_TAG = sliceHex(keccak256(stringToHex("dxCouncil.vote")), 0, 4);
 
 const loadVotedProposals = async (
   publicClient: ReturnType<typeof usePublicClient>,
   councilAddr?: string,
 ): Promise<{ id: string; choice: number }[]> => {
-  const identity = getIdentity();
-  if (!identity || !publicClient || !councilAddr) return [];
+  const seed = peekSeedField();
+  if (!seed || !publicClient || !councilAddr) return [];
   try {
     const logs = await publicClient.getLogs({
       address: councilAddr as Hash,
@@ -45,7 +48,10 @@ const loadVotedProposals = async (
         l.args.choice === undefined
       )
         continue;
-      const mine = semaphoreNullifier(l.args.id, identity.secretScalar);
+      const mine = nullifierOf(
+        seed,
+        scopeOf(councilAddr as Hash, VOTE_TAG, l.args.id),
+      );
       if (mine === l.args.nullifier) {
         byProposal.set(l.args.id.toString(), Number(l.args.choice));
       }
@@ -221,7 +227,8 @@ const loadAnon = async (
   );
 
   const signals: DashboardSignalRow[] = [];
-  if (publicClient && signalReady && signalAddr) {
+  const seed = peekSeedField();
+  if (publicClient && signalReady && signalAddr && seed) {
     try {
       const anonLogs = await publicClient.getLogs({
         address: signalAddr as Hash,
@@ -235,7 +242,10 @@ const loadAnon = async (
           l.args.choice === undefined
         )
           continue;
-        const mine = semaphoreNullifier(l.args.kitId, identity.secretScalar);
+        const mine = nullifierOf(
+          seed,
+          scopeOf(signalAddr as Hash, SIGNAL_TAG, l.args.kitId),
+        );
         if (mine === l.args.nullifier) {
           signals.push({
             kitId: l.args.kitId.toString(),
@@ -371,8 +381,8 @@ const useDashboard = (): { data: DashboardData; loading: boolean } => {
               mode: "public",
             });
           }
-          const identity = getIdentity();
-          if (identity) {
+          const seed = peekSeedField();
+          if (seed) {
             for (const l of anonLogs) {
               if (
                 l.args.kitId === undefined ||
@@ -380,7 +390,10 @@ const useDashboard = (): { data: DashboardData; loading: boolean } => {
                 l.args.choice === undefined
               )
                 continue;
-              const mine = semaphoreNullifier(l.args.kitId, identity.secretScalar);
+              const mine = nullifierOf(
+                seed,
+                scopeOf(signalAddr as Hash, SIGNAL_TAG, l.args.kitId),
+              );
               if (mine === l.args.nullifier) {
                 signals.push({
                   kitId: l.args.kitId.toString(),

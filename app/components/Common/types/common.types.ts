@@ -780,6 +780,7 @@ export type CreateKitProps = {
   labels: any;
   rungs: string[];
   initial?: Partial<KitDraft>;
+  editing?: boolean;
 };
 
 
@@ -805,12 +806,10 @@ export type ChipEnrollData = {
   commitment: `0x${string}`;
   proof: `0x${string}`;
   enrollNullifier: `0x${string}`;
+  freshBind: `0x${string}`;
+  siblings: `0x${string}`[];
 };
 
-export type ChipPublishData = {
-  semaphoreProof: import("@/app/lib/zk/identityTree").ContractSemaphoreProof;
-  ownerTag: `0x${string}`;
-};
 
 export type GrantFilters = {
   text: string;
