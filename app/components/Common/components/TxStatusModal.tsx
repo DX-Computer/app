@@ -80,6 +80,13 @@ const TxStatusModal: FunctionComponent<Props> = ({
               </span>
             )}
 
+            {status.message?.startsWith("device:") &&
+              status.phase === "error" && (
+                <span className="relative flex text-[10px] text-gray-300 leading-relaxed break-words">
+                  {t.deviceHint}
+                </span>
+              )}
+
             {status.note && status.phase === "success" && (
               <span className="relative flex text-[10px] text-yellow-300 leading-relaxed break-words break-all overflow-y-scroll max-h-[70vh]">
                 {status.note}

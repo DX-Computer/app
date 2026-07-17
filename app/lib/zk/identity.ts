@@ -21,24 +21,32 @@ export const notifyIdentity = (): void => {
 };
 
 export const connectChip = async (): Promise<Identity> => {
-  const res = await fetch(`${BRIDGE_URL}/secret`).catch(() => null);
-  if (!res) {
-    console.log("secret: bridge not reachable at", BRIDGE_URL);
-    throw new Error("bridgeUnreachable");
-  }
-  const data = (await res.json().catch(() => ({}))) as {
-    identitySeed?: string;
-    postSeed?: string;
-    error?: string;
-  };
-  if (!res.ok || !data.identitySeed || !data.postSeed) {
+  let retried = false;
+  while (true) {
+    const res = await fetch(`${BRIDGE_URL}/secret`).catch(() => null);
+    if (!res) {
+      console.log("secret: bridge not reachable at", BRIDGE_URL);
+      throw new Error("bridgeUnreachable");
+    }
+    const data = (await res.json().catch(() => ({}))) as {
+      identitySeed?: string;
+      postSeed?: string;
+      error?: string;
+    };
+    if (res.ok && data.identitySeed && data.postSeed) {
+      chipIdentity = new Identity(data.identitySeed);
+      chipPostSecret = BigInt(data.postSeed);
+      notifyIdentity();
+      return chipIdentity;
+    }
     console.log("secret failed", res.status, data.error);
-    throw new Error("seedFailed");
+    if (!retried && (data.error || "").startsWith("device:")) {
+      retried = true;
+      await new Promise((r) => setTimeout(r, 800));
+      continue;
+    }
+    throw new Error(data.error || "seedFailed");
   }
-  chipIdentity = new Identity(data.identitySeed);
-  chipPostSecret = BigInt(data.postSeed);
-  notifyIdentity();
-  return chipIdentity;
 };
 
 export const disconnectChip = (): void => {

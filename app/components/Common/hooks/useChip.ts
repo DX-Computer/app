@@ -62,9 +62,10 @@ const useChip = () => {
 
   const connect = async (): Promise<void> => {
     setBusy(true);
+    forgetDeviceSecret();
     try {
-      await fetchDeviceSecret();
       await connectChip();
+      await fetchDeviceSecret();
       setCommitment(storedCommitment());
       setConnected(true);
     } catch (e) {

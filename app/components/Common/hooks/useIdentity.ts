@@ -56,6 +56,7 @@ const useIdentity = (commitment?: string) => {
           BigInt(commitmentArg as Hash),
           siblings as Hash[],
         ],
+        gas: 60_000_000n,
         ...paymasterFields(),
       } as never,
       { anon: true },

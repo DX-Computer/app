@@ -22,21 +22,29 @@ let cachedDeviceSecret: Hex | null = null;
 let inflightSeed: Promise<Hex> | null = null;
 
 const requestDeviceSecret = async (): Promise<Hex> => {
-  const res = await fetch(`${BRIDGE_URL}/seed`).catch(() => null);
-  if (!res) {
-    console.log("seed: bridge not reachable at", BRIDGE_URL);
-    throw new Error("bridgeUnreachable");
-  }
-  const data = (await res.json().catch(() => ({}))) as {
-    deviceSecret?: string;
-    error?: string;
-  };
-  if (!res.ok || !data.deviceSecret) {
+  let retried = false;
+  while (true) {
+    const res = await fetch(`${BRIDGE_URL}/seed`).catch(() => null);
+    if (!res) {
+      console.log("seed: bridge not reachable at", BRIDGE_URL);
+      throw new Error("bridgeUnreachable");
+    }
+    const data = (await res.json().catch(() => ({}))) as {
+      deviceSecret?: string;
+      error?: string;
+    };
+    if (res.ok && data.deviceSecret) {
+      cachedDeviceSecret = data.deviceSecret as Hex;
+      return cachedDeviceSecret;
+    }
     console.log("seed failed", res.status, data.error);
-    throw new Error("seedFailed");
+    if (!retried && (data.error || "").startsWith("device:")) {
+      retried = true;
+      await new Promise((r) => setTimeout(r, 800));
+      continue;
+    }
+    throw new Error(data.error || "seedFailed");
   }
-  cachedDeviceSecret = data.deviceSecret as Hex;
-  return cachedDeviceSecret;
 };
 
 export const fetchDeviceSecret = async (): Promise<Hex> => {

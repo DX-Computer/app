@@ -85,6 +85,7 @@
     "registeredLate": "registraste tu saldo después de crear esta propuesta — solo puedes votar en propuestas creadas después de registrarte. regístrate, luego crea una propuesta nueva para probar el voto.",
     "bridgeUnreachable": "puente del chip inaccesible — abre la app rezygcki y activa el browser bridge",
     "seedFailed": "no se pudo leer el seed del chip — revisa el device y reintenta",
+    "deviceHint": "mira la pantalla del device: puede pedir el PIN — desbloquéalo, aprueba con D1 y prueba otra vez",
     "actRejected": "chip ocupado o acción rechazada en el device — aprueba con D1",
     "actTimeout": "tiempo agotado esperando D1 — aprueba en el device y reintenta",
     "chipError": "error del chip — revisa el device y la ventana del bridge",

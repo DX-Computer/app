@@ -85,6 +85,7 @@
     "registeredLate": "tu as enregistré ton solde après la création de cette proposition — tu ne peux voter que sur les propositions créées après ton enregistrement. enregistre-toi, puis crée une nouvelle proposition pour tester le vote.",
     "bridgeUnreachable": "pont de la puce inaccessible — ouvre l'app rezygcki et active le browser bridge",
     "seedFailed": "impossible de lire le seed de la puce — vérifie l'appareil et réessaie",
+    "deviceHint": "regarde l'écran du device : il peut demander le PIN — déverrouille-le, approuve avec D1 et réessaie",
     "actRejected": "puce occupée ou action rejetée sur l'appareil — approuve avec D1",
     "actTimeout": "délai dépassé en attente de D1 — approuve sur l'appareil et réessaie",
     "chipError": "erreur de la puce — vérifie l'appareil et la fenêtre du bridge",

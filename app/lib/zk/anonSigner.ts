@@ -61,6 +61,7 @@ export const anonWriteContract = async (params: {
   abi: readonly unknown[];
   functionName: string;
   args: readonly unknown[];
+  gas?: bigint;
 }): Promise<`0x${string}`> => {
   const account = privateKeyToAccount(anonKey());
   const chain = config.chains[0];
@@ -72,6 +73,7 @@ export const anonWriteContract = async (params: {
     }).extend(eip712WalletActions());
     return client.writeContract({
       ...params,
+      gas: params.gas ?? 60_000_000n,
       ...paymasterFields(),
     } as never);
   }

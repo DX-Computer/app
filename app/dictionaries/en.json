@@ -85,6 +85,7 @@
     "registeredLate": "you registered your balance after this proposal was created — you can only vote on proposals created after you registered. register, then create a new proposal to test voting.",
     "bridgeUnreachable": "chip bridge not reachable — open the rezygcki app and turn on the browser bridge",
     "seedFailed": "could not read the chip seed — check the device and try again",
+    "deviceHint": "check the device screen: it may ask for the PIN — unlock it, approve with D1 and try again",
     "actRejected": "chip busy or action rejected on the device — press D1 to approve",
     "actTimeout": "timed out waiting for D1 — approve on the device and retry",
     "chipError": "chip error — check the device and the bridge window",
